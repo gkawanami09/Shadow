@@ -1,0 +1,54 @@
+OBJETIVOS - OBR Resgate (segue linha + resgate)
+
+Fontes:
+- robot/regulamento/geral.pdf (Manual de Regras e Instrucoes, versao 1.1, Julho 2025)
+- robot/regulamento/ladrilho.pdf (Sugestoes de ladrilhos, versao 1.0)
+
+STATUS ATUAL (o que ja existe no codigo):
+
+SEGUIR LINHA - VISAO (FEITO)
+[FEITO] Captura de camera (webcam/PI) e loop em tempo real.
+[FEITO] Detectar linha preta em fundo branco (threshold + ROI).
+[FEITO] Calcular offset (-1 a 1) e confidence.
+[FEITO] Detectar intersecao (heuristica de largura da linha na ROI).
+[FEITO] Detectar marcador verde ANTES da intersecao e decidir esquerda/direita.
+[FEITO] Ignorar verde DEPOIS da intersecao (verde falso) e seguir reto.
+[FEITO] Detectar beco sem saida (2 verdes antes da intersecao).
+[FEITO] Logica de giro 180 para direita quando beco sem saida.
+[FEITO] Detectar gap curto (perda breve da linha) mantendo ultimo offset.
+[FEITO] Debug visual (janela, contorno, texto de estado).
+
+SEGUIR LINHA - VISAO (A FAZER)
+[A FAZER] Melhorar deteccao de intersecao (3 ou 4 ramificacoes).
+[A FAZER] Detectar obstaculo na linha e estrategia de desvio/retorno.
+[A FAZER] Detectar lombada (redutor) e ajustar controle se necessario.
+[A FAZER] Detectar rampa/gangorra/passagem (perigos fisicos).
+[A FAZER] Detectar faixa prateada de entrada da sala de resgate.
+[A FAZER] Detectar faixa preta de saida da sala de resgate.
+[A FAZER] Detectar faixa vermelha de chegada (fim do percurso).
+[A FAZER] Parar e emitir sinal ao identificar marcador verde (requisito do manual).
+[A FAZER] Parar e emitir sinal ao identificar vitima (requisito do manual).
+[A FAZER] Calibracao automatica de limiares (HSV do verde e threshold da linha).
+
+RESGATE (A FAZER)
+[A FAZER] Entrar na sala de resgate quando atingir a fita prateada.
+[A FAZER] Navegar na sala sem linha (busca e mapeamento simples).
+[A FAZER] Detectar vitimas vivas (esferas prateadas 4-5 cm).
+[A FAZER] Detectar vitimas mortas (esferas escuras 4-5 cm).
+[A FAZER] Identificar area de resgate verde e vermelha.
+[A FAZER] Depositar vitimas na area correta (verde/verm).
+[A FAZER] Logica de coleta/soltar vitima (mecanica: descer/pegar).
+[A FAZER] Sair da sala e retornar ao segue linha pelo trajeto de saida.
+[A FAZER] Lidar com reposicionamento aleatorio das areas de resgate.
+
+INTEGRACAO COM MOTORES/ARDUINO (A FAZER)
+[A FAZER] Definir protocolo serial Pi -> Arduino (offset, estado, decisao).
+[A FAZER] Controlador de motor (PID) usando offset da camera.
+[A FAZER] Comandos explicitos: virar direita/esquerda, reto, 180 direita, parar.
+[A FAZER] Sincronizar velocidade com obstaculos/gap/intersecoes.
+[A FAZER] Testes de latencia e frequencia do loop.
+
+DOCUMENTACAO E TESTES (A FAZER)
+[A FAZER] Checklists de testes por elemento (gap, intersecao, beco, verde falso).
+[A FAZER] Guia de calibracao com fotos/valores para HSV e threshold.
+[A FAZER] Descricao do setup fisico (camera, altura, inclinacao).
