@@ -1,0 +1,1925 @@
+
+--- PAGE 1 ---
+Manual de Regras
+e Instruções
+Presencial / Regional e Estadual
+MODALIDADE PRÁ TICA: 
+ROBÓTICA DE RESGA TE
+Versão 1.1
+Julho - 2025
+
+
+--- PAGE 2 ---
+Caderno Laranja: Conﬂitos (Pág. 73)
+Caderno Amarelo: A Olimpíada (Pág. 3)
+Caderno Azul: Os Robôs (Pág. 11)
+Caderno Verde: O Desaﬁo (Pág. 16)
+Caderno Vermelho: A competição (Pág. 54)
+Caderno Cinza: Mudanças (Pág. 70)
+ÍNDICE
+Este documento é de propriedade da Olimpíada Brasileira de Robótica e pode ser
+distribuído e reproduzido livremente, sem alteração de seu conteúdo original.
+2
+Qualquer dúvida sobre a Modalidade Prática: Resgate Presencial, procure no FAQ da OBR
+obr.robocup.org.br/perguntas-frequentes
+
+
+--- PAGE 3 ---
+Caderno Amarelo - A Olimpíada
+Caderno Amarelo
+A Olimpíada
+Descrição dos princípios, objetivos, código de conduta e a 
+missão da Olimpíada Brasileira de Robótica
+3
+
+--- PAGE 4 ---
+Caderno Amarelo - A Olimpíada
+Princípios dos Competidores e Equipes
+Alcançar seus objetivos sem 
+esperar que seu professor os 
+alcance por você.
+Superar os seus limites e 
+os da sua equipe.
+Ajudar seus colegas e 
+adversários a superarem seus 
+limites.
+Ser um bom competidor e amigo 
+de todos ao mesmo tempo.
+Aprender mais sobre a evolução da 
+robótica no Brasil e no mundo. 
+Ajudar sempre a construir uma 
+comunidade OBR maior e melhor.
+Saber que mais importante do 
+que ganhar é conseguir competir 
+e aprender.
+4
+
+
+--- PAGE 5 ---
+Caderno Amarelo - A Olimpíada
+No ﬁnal, não importa  quem  vai  ganhar ou perder a competição, pois o  
+Brasil e nossos estudantes já irão ter ganhado muito só por terem 
+participado de forma intensa dessa que é a maior ação de disseminação 
+da robótica em nível Nacional: A Olimpíada Brasileira de Robótica!
+Nosso maior desaﬁo e objetivo é tornar nosso país um forte protagonista  
+das transformações tecnológicas do futuro, capacitando nossos 
+estudantes com a robótica desde seus primeiros anos de vida.
+Espera-se que todos os participantes (estudantes e seus tutores) 
+respeitem a missão da competição e da OBR de: promover, incentivar e 
+disseminar a robótica pelo Brasil.
+A competição e a OBR, portanto, não devem ser objeto de 
+promoção pessoal, muito menos ser utilizada como 
+mecanismo de promoção de escolas. Ela deve ser única e 
+exclusivamente usada para a promoção dos nossos 
+estudantes a um futuro melhor.
+A Robótica é uma área 
+extremamente motivadora e 
+que deve semear o 
+desenvolvimento tecnológico 
+no país e no Mundo, nos 
+próximos anos. 
+Proporcionar aos estudantes de hoje um contato com essa tecnologia 
+pode retirá-los da condição de meros usuários de tecnologia e abrir a  
+perspectiva de torná-los desenvolvedores tecnológicos nas próximas  
+décadas, além de elevar o país e sua juventude a patamares de grandeza 
+comparáveis aos demais países desenvolvidos do mundo.
+Missão da OBR
+5
+
+--- PAGE 6 ---
+Caderno Amarelo - A Olimpíada
+Participe da competição de forma limpa, saudável e ética. Ajude seus 
+colegas e outras equipes a superarem seus limites. Divirta-se durante 
+toda a competição e colabore para que todos os demais participantes 
+(juízes, plateia, professores, etc) se divirtam também. 
+Espera-se, ainda, que os participantes apresentem os seguintes 
+comportamentos e respeito:
+● Tutores NÃO devem trabalhar ou auxiliar diretamente no 
+planejamento, construção e na programação dos robôs;
+● Participantes devem ser cuidadosos com as demais pessoas e/ou 
+seus robôs quando estiverem competindo;
+● Tutores (professores, pais ou responsáveis; e outros) não são 
+permitidos na área de arenas oﬁciais nem na área de trabalho das 
+equipes;
+● Equipes podem ser desclassiﬁcadas caso desrespeitem este Código 
+de Conduta.
+Não é se você ganha ou perde que conta, mas o quanto você aprende 
+que vale!
+É esperado que todas as equipes estejam motivadas pelo espírito do “fair 
+play” (jogo justo).
+A organização fará todo o esforço para permitir um ambiente de 
+competição saudável e cooperativo. Em alguns casos, medidas extremas 
+podem ser tomadas:
+Comportamento dos professores ou dos pais dos alunos de uma equipe 
+que causem desconforto, desrespeito ou que não colaborem para a boa 
+conduta da competição, podendo ser convidados a se retirarem das 
+dependências da competição sob risco de desclassiﬁcação de sua 
+equipe. De forma análoga, a interferência de professores/tutores nos 
+robôs ou em decisões dos juízes poderão resultar em uma advertência e, 
+posteriormente, em uma desclassiﬁcação da equipe.
+Código de Conduta
+6
+
+--- PAGE 7 ---
+Caderno Amarelo - A Olimpíada
+Participe da competição de forma limpa, saudável e ética. Ajude seus 
+colegas e outras equipes a superarem seus limites. Divirta-se durante 
+toda a competição e colabore para que todos os demais participantes 
+(juízes, plateia, professores, etc) se divirtam também. 
+Os participantes devem estar atentos com as outras pessoas e seus robôs 
+quando se deslocarem nas áreas da competição. 
+Os participantes não devem entrar nas áreas de competição de outras 
+ligas ou outras equipes, a não ser quando expressamente convidado a 
+fazê-lo pelos membros da equipe. 
+As equipes serão responsáveis pela veriﬁcação das informações 
+atualizadas, horários, reuniões, anúncios, etc,  durante o evento. 
+Informações atualizadas serão fornecidas em quadros de avisos ou TVs no 
+local e, se possível, no site da competição.
+Os participantes e seus acompanhantes, pais, professores, mentores, 
+responsáveis, que não apresentarem um comportamento adequado, de 
+acordo com os princípios da Olimpíada, poderão ser convidados a se 
+retirar do local da competição com o risco da equipe ser desclassiﬁcada 
+do torneio. 
+Árbitros e organizadores do torneio, são os responsáveis pela aplicação 
+das regras igualmente a todos os participantes. 
+É esperado que as equipes estejam presentes no local no início do 
+período de competição, pois as atividades importantes ocorrerão. Essas 
+atividades incluem, mas não estão limitadas a: registro, sorteio de 
+participação, entrevistas, reuniões de mentores e capitães, entre outras.
+Comportamento
+7
+
+--- PAGE 8 ---
+Caderno Amarelo - A Olimpíada
+Membros que não sejam da equipe, mentores, professores, pais e outros 
+familiares, tradutores, acompanhantes e qualquer outro membro adulto da 
+equipe, não são permitidos na área de trabalho dos estudantes. 
+Mentores não têm permissão para construir, reparar os robôs nem tão 
+pouco estarem envolvidos na programação dos robôs da equipe antes e 
+durante a competição, em qualquer local ou tempo. 
+Caso ocorra interferência do mentor na montagem, reparo ou 
+programação dos robôs ou nas decisões dos árbitros, os juízes farão uma 
+advertência na primeira instância. Em caso de reincidência, a equipe 
+poderá ser desclassiﬁcada a critério da Comissão de Arbitragem.
+Robôs e programações devem ser fruto do trabalho dos estudantes. 
+Qualquer robô que aparecer na competição com comportamento ou 
+formato idêntico a outro robô, será objeto de re-inspeção e passível de 
+desclassiﬁcação.
+Mentores
+8
+
+
+--- PAGE 9 ---
+Caderno Amarelo - A Olimpíada
+Fraude e má conduta não são tolerados. Atos fraudulentos podem incluir: 
+● Mentores trabalhando no software ou hardware do robô dos alunos 
+durante a competição. 
+● Grupo de alunos mais experientes podem dar conselhos/dicas, mas 
+não devem fazer o trabalho para outras equipes. Isso pode levar à 
+desclassiﬁcação da equipe.
+A OBR reserva-se o direito de revogar um prêmio se o comportamento 
+fraudulento puder ser comprovado após a cerimônia de premiação ter 
+sido realizada. 
+Se ﬁcar claro que um mentor viola intencionalmente o código de 
+conduta, e  modiﬁca e trabalha no robô dos alunos, o mentor e/ou sua 
+escola poderá ser banido de futuras participações na OBR. 
+As equipes que violam o código de conduta podem ser desclassiﬁcadas 
+do torneio. Também é possível desclassiﬁcar apenas um único membro da 
+equipe.
+Os organizadores do torneio e árbitros, podem dar uma advertência em 
+casos menos graves de violações do código de conduta. Em casos graves 
+ou repetidos casos de violações do código de conduta, uma equipe pode 
+ser desclassiﬁcada imediatamente, sem qualquer aviso prévio
+Ética e Integridade
+9
+
+--- PAGE 10 ---
+Caderno Amarelo - A Olimpíada
+É o entendimento comum a toda a organização de que todo 
+desenvolvimento pessoal, tecnológico ou curricular deve ser 
+compartilhado entre todos os participantes da competição, durante e 
+depois dela. O melhor ensinamento que pode ser dado à equipe é dotá-la 
+do espírito de cooperação para com os colegas. Qualquer robô ou 
+desenvolvimento feito pelos alunos poderá ser publicado nos websites 
+oﬁciais, a critério da comissão organizadora.
+Compartilhamento de Conhecimento
+10
+
+--- PAGE 11 ---
+Caderno Azul - Os Robôs
+Caderno Azul
+Os Robôs
+Como deve ser feita a construção do robô, como deverá ser 
+seu funcionamento e regras de comunicação com/do robô.
+11
+
+
+--- PAGE 12 ---
+Caderno Azul - Os Robôs
+Os robôs devem ser programados para atuar de forma autônoma. Não é 
+permitido o uso de um controle remoto, controle manual ou a transmissão 
+de informações (por cabo, sensores, sem ﬁo, etc).
+Robôs devem ser iniciados manualmente pelo capitão da equipe.
+É proibido qualquer tipo de pré-mapeamento (movimentos pré-deﬁnidos 
+com base em locais conhecidos ou posições de características da arena).
+Os robôs não podem daniﬁcar qualquer parte da arena de forma alguma.
+Controle
+12
+Comunicação
+A comunicação sem ﬁo só é permitida entre os controladores que fazem 
+parte do robô da equipe em competição. Só é permitida a comunicação via 
+Bluetooth classe 2 ou classe 3 (alcance inferior a 20 metros) ou via 
+ZigBee. Outros tipos de equipamentos de comunicação sem ﬁo precisam 
+ser removidos ou desativados. 
+O uso de controle remoto para controlar manualmente os robôs não é 
+permitido. Robôs que possuem hardware que contém possibilidade de 
+comunicações sem ﬁo, devem ter estas removidas ou desabilitadas. Se 
+o robô tem equipamento para outras formas de comunicação sem ﬁo, a 
+equipe deverá provar que estes foram desativados. Robôs que não estão 
+de acordo com esta regra podem sofrer a desclassiﬁcação imediata do 
+torneio.
+Os robôs devem atuar de 
+maneira autônoma.
+
+
+--- PAGE 13 ---
+Caderno Azul - Os Robôs
+Construção
+13
+Qualquer kit de robô ou blocos de construção, disponíveis no mercado ou 
+construídos a partir de matérias-primas de hardware, podem ser usados, 
+contanto que o projeto, a construção do robô e a programação sejam 
+essencialmente e substancialmente fruto do trabalho dos alunos.
+Os robôs devem ser montados, programados, desenvolvidos e ajustados 
+apenas pelos estudantes.
+As equipes não têm permissão para usar kits de robôs produzidos 
+comercialmente que se enquadre na categoria de “seguidor de linha” ou 
+“robô para resgate” ou componentes, câmeras e sensores 
+especiﬁcamente projetados ou comercializados para completar qualquer 
+tarefa principal da categoria Robótica de Resgate da OBR (exemplo: não é 
+permitido a utilização de câmeras que já possuem soluções 
+pré-programadas para identiﬁcação). Os robôs que não cumprirem esta 
+regra enfrentarão a desclassiﬁcação imediata do torneio. Se houver 
+alguma dúvida, as equipes devem consultar a Coordenação da OBR antes 
+da competição.
+Para a segurança dos participantes e espectadores, são permitidos 
+apenas lasers de classe 1 e 2. Estes equipamentos serão veriﬁcados 
+durante a inspeção. As equipes que usam lasers deverão portar e
+mostrar as informações técnicas (datasheet) do sensor. 
+O robô pode ter qualquer tamanho. Os robôs devem ser autônomos 
+(atuar sem qualquer interferência humana) e devem ser iniciados 
+manualmente pelo capitão da equipe. Não há limite de sensores, 
+motores, atuadores ou qualquer outro instrumento dentro do robô. 
+Lembrem-se que o robô deve conseguir andar pela arena onde há limites 
+de área e espaço. O tamanho do robô e sua estrutura fazem parte da 
+estratégia da equipe. Não são aceitas reclamações sobre a arena por 
+causa do tamanho do robô. 
+Robôs como drones ou hovercrafts são proibidos no desaﬁo por questões 
+de segurança.
+
+--- PAGE 14 ---
+Caderno Azul - Os Robôs
+Construção
+14
+Cada equipe deve ter seu próprio robô. Não é permitido o 
+compartilhamento de robôs entre equipes, uma vez que a montagem e 
+estrutura de hardware do robô também são parte da estratégia.
+Caso os juízes identiﬁquem um robô ou programa que não foi construído 
+ou desenvolvido pelos estudantes, a equipe será desclassiﬁcada. Os 
+juízes são orientados a solicitar uma cópia do programa quando forem 
+constatadas irregularidades.
+Os robôs podem sofrer danos ao cair da arena, fazer contato com outro 
+robô ou entrar em contato com os elementos da arena. O comitê 
+organizador não pode antecipar todas as situações potenciais de danos 
+ao robô que podem ocorrer. As equipes devem garantir que todos os 
+elementos do robô sejam devidamente protegidos com materiais 
+resistentes. Por exemplo, os circuitos elétricos devem ser protegidos de 
+contatos humanos, contato direto com outros robôs e elementos da 
+arena.
+Quando as pilhas ou baterias são transportadas ou movidas, 
+recomenda-se a utilização de sacos de segurança. Devem ser feitos 
+esforços para garantir que os robôs evitem curtos-circuitos ou 
+vazamentos químicos.
+É desejável que os robôs estejam equipados com uma alça para facilitar 
+pegá-los durante a rodada. Na fase Nacional da OBR a alça é obrigatória. 
+Os robôs devem estar equipados com um único interruptor/botão físico 
+binário, com exceção dos botões que fazem parte de controladores 
+comerciais, claramente visível para o árbitro, para iniciar o robô no início 
+da rodada e quando ocorrer falha de progresso. O procedimento 
+realizado após a falha de progresso só pode incluir este(s) botão(es) e no 
+máximo mais uma chave para corte de energia. A equipe deve notiﬁcar o 
+árbitro sobre seu procedimento de Falha de Progresso antes de cada 
+rodada, e somente este procedimento pode ser realizado após uma Falha 
+de Progresso).
+
+
+--- PAGE 15 ---
+Caderno Azul - Os Robôs
+Construção
+15
+Prezadas equipes,
+Mesmo que nas fases regionais e estaduais da competição não seja 
+obrigatória a entrega de documentação, diários ou vídeos, é altamente 
+recomendado que todas as equipes adotem o bom costume de 
+documentar toda a trajetória do projeto. Isso inclui o registro contínuo da 
+evolução de hardware e software do robô, versionamentos, processos de 
+desenvolvimento e principais decisões, por meio de tabelas, fotos, vídeos 
+e documentação técnica.
+Essa prática não apenas facilita a organização interna da equipe, como 
+também garante que, ao chegar à fase Nacional, já exista uma base de 
+documentação prévia. Isso tornará a adaptação ao template oﬁcial da 
+competição mais eﬁciente e evitará contratempos de última hora.
+
+
+--- PAGE 16 ---
+Caderno Verde - O Desaﬁo
+Caderno Verde
+O Desaﬁo
+Regras, descrições e pontuações de cada componente do 
+desaﬁo.
+16
+
+--- PAGE 17 ---
+Caderno Verde - O Desaﬁo
+A missão da Modalidade Prática - Robótica de Resgate caracteriza-se 
+por realizar o resgate de vítimas de uma situação de desastre utilizando 
+robôs completamente autônomos e sem qualquer assistência humana.
+Em um ambiente hostil, muito perigoso para a saúde do ser humano, um 
+robô completamente autônomo planejado, construído e programado pela 
+equipe de estudantes recebe uma tarefa difícil: realizar o resgate de 
+vítimas sem a necessidade de interferência humana.
+O robô deve ser ágil para superar obstáculos difíceis, sejam eles 
+caminhos onde o trajeto não pode ser reconhecido, elementos 
+desconhecidos que devem ser desviados, caminhos sem saída que 
+precisam ser superados, e entre outros contratempos para conseguir 
+salvar a(s) vítima(s), transportando-a(s) para uma região segura onde os 
+humanos já poderão assumir os cuidados. Após o resgate da vítima, o robô 
+deve sair da sala de salvamento para continuar sua missão até chegar no 
+ladrilho de chegada. 
+Gerenciamento de tempo e habilidades técnicas são 
+essenciais! Venha ser a mais bem-sucedida Equipe de 
+Resgate do Brasil!
+Descrição
+17
+
+
+--- PAGE 18 ---
+Caderno Verde - O Desaﬁo
+Um robô autônomo deve seguir uma linha escura enquanto supera 
+perigos diferentes em uma arena modular formada por diferentes 
+ladrilhos. O piso é claro e os ladrilhos podem ter pequenos desníveis entre 
+si e rampas são utilizadas para alterar o nível da arena.
+Equipes não podem passar informações sobre a arena ao robô, já que ele 
+deve reconhecer a arena sozinho através de seus sensores. O robô recebe 
+pontuação no trajeto de acordo com a informação seguinte:
+Superar uma Gangorra
+Superar Interseção ou Beco sem Saída
+Desviar de um Obstáculo
+Subir ou Descer cada ladrilho contendo uma rampa
+Superar um Ladrilho Contendo Gap(s)
+Superar um ladrilho contendo Lombada(s)
+10 Pontos
+20 Pontos
+20 Pontos
+10 Pontos
+10 Pontos
+10 Pontos
+Superar uma Passagem 0 Pontos
+Resumo
+18
+Ladrilho de Chegada 60 Pontos
+
+
+--- PAGE 19 ---
+Caderno Verde - O Desaﬁo
+Caso o robô ﬁque preso em algum ponto da arena ele pode ser reiniciado 
+no último checkpoint, marcados por pequenos marcadores cilíndricos de 
+cor laranja. O robô ganhará pontos quando alcançar novos checkpoints. 
+Algum lugar no trajeto terá uma sala quadrada ou retangular, a Sala de 
+Resgate. A entrada para essa sala será demarcada por uma ﬁta de cor 
+prateada no piso e a saída dessa sala será demarcada com uma ﬁta de cor 
+preta no chão. 
+Dentro da Sala de Resgate, o robô deve localizar e transportar vítimas 
+vivas, pequenas esferas de cor prata, para a Área de Resgate Verde e 
+mortas, pequenas bolas escuras, para a Área de Resgate Vermelha. As 
+vítimas são representadas por esferas de 4-5 cm de diâmetro. O robô 
+pode ganhar múltiplos multiplicadores por resgatar de vítimas. O robô 
+deve então sair da Sala de Resgate e seguir a linha até que o Ladrilho de 
+Chegada com uma Linha Vermelha seja alcançado.
+A TENÇÃO: Esta regra pode ser revisada e atualizada a qualquer momento 
+até o dia do evento. Cabe aos participantes e professores acompanharem 
+as atualizações no site da OBR. 
+Resumo (Parte 2)
+19
+Sala de Resgate
+(ou Zona de Resgate)
+Trajeto (Inicial)
+Área de Resgate
+(ou Ponto de Resgate)
+Área de Resgate
+(ou Ponto de Resgate)
+Trajeto (Final)
+
+--- PAGE 20 ---
+Caderno Verde - O Desaﬁo
+A arena é modular, composta por ladrilhos ou placas de madeira com 
+vários ladrilhos dentro, que podem ser usados para gerar um número 
+inﬁnito de diferentes caminhos para o robô percorrer.
+A arena será composta de ladrilhos de 300 mm x 300 mm (+-20 mm), 
+podendo estar em placas individuais, ou em grandes placas de madeira 
+com delimitações dos ladrilhos, feitas com lápis que formarão os 
+ladrilhos. A seleção ﬁnal dos ladrilhos e seu arranjo não será revelado até 
+o dia da competição. Os ladrilhos de competição podem ser montados 
+sobre um material de suporte de qualquer espessura. 
+O ambiente será composto por uma área de percurso, uma sala de 
+resgate medindo entre 90 x 90 cm e 120 x 90 cm  e um trajeto de saída. 
+A área de percurso e trajeto de saída tem disponível a linha do trajeto e os 
+desaﬁos a serem cumpridos (gap, rampa, gangorra, intersecções, etc) e na 
+sala de resgate existirão as vítimas a serem salvas e as duas áreas de 
+resgate, uma verde e uma vermelha. A arena poderá ter um ou mais níveis, 
+podendo ter rampa no trajeto, interligando ladrilhos, ou interligando os 
+trajetos à sala resgate.
+Haverá um mínimo de 8 ladrilhos em uma arena de competição, excluindo 
+o ladrilho de partida e de chegada.
+É possível que haja ladrilhos que possuem um tamanho maior que outros, 
+porém se mantendo na mesma proporção e possuindo um tamanho 
+possível de ser composto pelos ladrilhos de tamanho “padrão”. A seguir 
+serão apresentados exemplos válidos e inválidos de diferentes tamanhos 
+de ladrilhos.
+Arena
+20
+
+--- PAGE 21 ---
+Caderno Verde - O Desaﬁo
+Exemplos válidos de junção de ladrilhos:
+Exemplos inválidos de junção de ladrilhos:
+3x
+3x
+x
+x
+Referência
+1.5x
+2.35x
+1.3x
+2x
+x
+1.3x
+3x
+2x
+6x
+x
+x
+x
+3x
+2x
+x
+xx
+x
+2x
+Construção da Arena 
+x
+x
+Referência
+21
+x
+3x
+x
+O piso da arena segue alguns padrões conforme as dimensões informadas 
+na página anterior, visíveis nos exemplos abaixo:
+x = 300 mm
+x = 300 mm
+
+--- PAGE 22 ---
+Caderno Verde - O Desaﬁo
+O Piso da arena, ladrilhos do trajeto, possuem um fundo claro (branco ou 
+próximo de branco) e uma linha escura, representando a área do desastre 
+e o caminho a ser seguido, respectivamente. Esse caminho não é um 
+trajeto perfeitamente reto, e pode realizar curvas de qualquer 
+angulação, podendo haver perigos, que serão explicados posteriormente 
+neste caderno.
+A superfície do piso pode ser em MDF , plástico, papel ou pintado, e pode 
+ser tanto liso, quanto texturizado (carpetado) e poderá ter um desnível 
+de até 3 mm de altura entre os ladrilhos. Devido à natureza dos ladrilhos, 
+pode haver um degrau e / ou diferença na construção da arena. No 
+primeiro ambiente e no trajeto de saída posterior a sala de resgate, haverá 
+linhas pretas dispostas em placas grandes de madeira, com os ladrilhos de 
+30 x 30 cm delimitados com marcações a lápis, ou podem estar dispostos 
+em formato de ladrilhos individuais (separados) de 30 x 30 cm.
+Exemplo ilustrativo de um fragmento de um 
+percurso.
+Os competidores precisam estar cientes de que, os ladrilhos serão 
+montados sobre a base da arena ou levantados do chão com os blocos 
+de elevação, o que pode tornar difícil para o robô voltar para um ladrilho 
+caso o robô saia deste. Nada será feito para ajudar os robôs que saírem 
+de um ladrilho a voltarem para o mesmo. Muito embora esforços sejam 
+feitos pela comissão organizadora para deixar o chão perfeitamente plano, 
+pequenas imperfeições, saliências ou degraus existirão, 
+independentemente do tipo de material utilizado, e é tarefa de cada robô 
+lidar da melhor forma possível com os problemas do mundo real.
+Piso
+22
+
+--- PAGE 23 ---
+Caderno Verde - O Desaﬁo
+O espaço entre os ladrilhos deve ser mínimo, e não perfeito, sendo 
+previsível pequenos desencaixes que podem servir de empecilho para o 
+robô, sempre dentro da missão e descrição do desaﬁo.
+Os robôs devem ser projetados de modo que estes possam navegar ao 
+longo de qualquer ladrilho que forme pontes sobre outros ladrilhos. Os 
+ladrilhos colocados sobre outros ladrilhos serão suportados por pilares 
+colocados nos cantos dos ladrilhos com espaço livre quadrado de 25 mm 
+x 25 mm, fazendo com que cada entrada/saída de ladrilho tenha 25 cm. A 
+altura mínima (espaço entre o chão e o teto) será de 25 cm (+-2mm). 
+devem estar preparados para andar por ladrilhos que formam pontes 
+sobre outros ladrilhos. Ladrilhos colocados acima de outros terão pilares 
+para sustentação, e o espaço mínimo para a passagem inferior é de 2 
+ladrilhos de altura. 
+Piso
+23
+SALA DE
+RESGA TE
+RAMP A
+TRAJETO DE 
+SAÍDA
+ÁREA DE
+PERCURSO
+
+--- PAGE 24 ---
+Caderno Verde - O Desaﬁo
+A linha pode estar a 12,5 cm de 
+distância de qualquer borda da arena, 
+paredes, pilares de sustentação de 
+rampa e obstáculos que não estejam a 
+frente do caminho do robô.
+Prepare seu robô para na fase 
+Nacional as linhas estarem a 10 cm da 
+borda.
+A linha preta, com 1-2 cm de largura, pode ser feita de ﬁta isolante elétrica 
+padrão, impressa em papel, adesivada, ou outros materiais. A linha preta 
+forma um caminho no chão. As linhas serão dispostas no chão da área de 
+percurso, trajeto de saída gangorras e rampas (caso houver) em um trajeto 
+não conhecido pelas equipes a priori, variando a cada rodada e similares 
+para todas as equipes nas arenas de mesmo nível – fácil, média e difícil - 
+da competição.
+Ladrilho de Partida.
+Linha (parte 1)
+24
+Ladrilho de Chegada.
+As linhas representam uma passagem segura, conhecida antes do 
+desastre, e podem estar obstruidas por obstáculos, gaps ou ter 
+redutores de velocidade, além de poder formar intersecções e becos 
+sem saída. As linhas podem ainda fazer curvas grandes, pequenas, curvas 
+em 90°, retas, zigue-zague, círculos, entre outras formas.
+Ladrilho onde a linha é em sua 
+extremidade
+A linha inicia-se com o ladrilho de partida, onde será a posição inicial do 
+robô. Ele se estende com diversos “perigos” até a faixa prateada ou prata 
+reﬂexiva de 25 mm, preenchendo toda a porta de entrada da Sala de 
+Resgate. Já o Trajeto Final recomeça na saída da sala de resgate, que 
+possui uma faixa preta de 25 mm, preenchendo toda a porta da saída da 
+sala, e estende-se até o ladrilho de chegada que possui uma faixa 
+vermelha de 25 mm x 300 mm no centro do ladrilho, ﬁm do percurso. 
+Durante todo o trajeto é possível encontrar Perigos.
+
+--- PAGE 25 ---
+Caderno Verde - O Desaﬁo
+A Figura mostra exemplos de disposições da linha no ambiente. A 
+trajetória das linhas não será divulgada previamente em hipótese alguma. 
+Assim, a capacidade do robô seguir um caminho desconhecido faz parte 
+do desaﬁo.
+Linha (parte 2)
+25
+No link a seguir, você encontrará o documento dos modelos de ladrilhos. 
+Importante: são apenas modelos, você poderá encontrar ladrilhos 
+diferentes e/ou modiﬁcados em relação aos disponibilizados. 
+https://obr.robocup.org.br/documentos-e-manuais/ 
+
+
+--- PAGE 26 ---
+Caderno Verde - O Desaﬁo
+No trajeto podem haver diversos perigos, tarefas que devem ser 
+completadas para o robô continuar (ou terminar) o percurso e receber 
+pontos como recompensa, sem causar Falhas de Progresso (explicadas 
+em outra seção deste caderno). T odos os perigos descritos podem 
+aparecer em qualquer parte da arena.
+Modelo de detalhamento de perigos presentes neste caderno:
+Cada perigo será pontuado apenas uma vez por cada direção no percurso. 
+Pontos não serão dados para tentativas subsequentes dentro do 
+percurso.
+Perigos do Trajeto
+26
+Imagem do 
+Componente
+Descrição sobre o componente.
+● Informações adicionais utilizadas para especiﬁcar melhor 
+diferenças entre níveis e outras informações.
+❖ Especiﬁcações técnicas serão apresentadas em verde.
+Imagem adicional 
+do Componente
+Imagem adicional 
+do Componente
+Imagem adicional 
+do Componente
+
+--- PAGE 27 ---
+Caderno Verde - O Desaﬁo
+Obstáculo (parte 1)
+Obstáculos são barreiras dentro de um 
+determinado ladrilho que podem variar de cor e 
+tamanho, forçando robô a desviar saindo da 
+linha durante alguns instantes. Caso o robô 
+desvie do obstáculo com sucesso será atribuído 
+20 pontos. Espera-se que um robô supere 
+vários obstáculos.
+20 Pontos
+● Os obstáculos só podem ser alocados em linhas pretas retas que 
+tenham, pelo menos, 10 cm (+/- 1 cm) de comprimento reto antes 
+do obstáculo e 10 cm (+/- 1 cm) de comprimento depois do 
+obstáculo. 
+● Ao desviar de um obstáculo, o robô deve retornar para a linha logo 
+em seguida ao obstáculo desviado para obter sucesso. Não será 
+permitido ao robô seguir por outra linha da arena nem a mesma 
+linha caso ela já tenha mudado de direção após o obstáculo. Só 
+será considerado superado quando mais da metade do robô, 
+quando visto de cima, alcançar com êxito o ladrilho subsequente e 
+volta a seguir a linha na direção desejada. Caso o robô não consiga 
+retornar à linha, será considerada FALHA DE PROGRESSO, 
+forçando o robô a reiniciar o seu percurso. 
+● Se o robô empurrar ou deslocar algum obstáculo, que podem ou 
+não ser muito pesados ou ﬁxos ao ladrilho, será considerado Falha 
+de Progresso. Será considerada a pontuação de um obstáculo caso 
+metade do robô visite o ladrilho seguinte quando visto de cima.
+❖ Obstáculos podem representar tijolos, blocos, pesos e outros 
+objetos grandes e pesados. Obstáculos não devem ocupar mais de 
+uma linha ou ladrilho e sua altura é de no mínimo 15 cm
+Ladrilho com um 
+obstáculo.
+Perigos do Trajeto
+27
+
+--- PAGE 28 ---
+Caderno Verde - O Desaﬁo
+Obstáculo (parte 2)
+Os obstáculos não serão colocados a menos de 
+25 cm (+/-2 cm)  da borda do campo, incluindo 
+bordas de ladrilhos elevados por rampas, e 
+ladrilhos inclinados.
+20 Pontos
+Os obstáculos podem ter qualquer cor, incluindo material 
+transparente, possuem tamanho mínimo e máximo e devem ser 
+pesados a ponto de impedir que os robôs os empurrem quando 
+levemente tocados. A abaixo apresenta os limites máximos e mínimos 
+que um obstáculo pode ter. O formato do obstáculo pode ser qualquer 
+um, desde que não ultrapasse os limites.
+Tamanho máximo e mínimo dos obstáculos.
+Exemplos de Obstáculos que podem ser usados são:
+- Tijolos ou Pedras;
+- Garrafas PET;
+- Caixa de Leite UHT cheia (areia, água, etc).
+Ladrilho com um 
+obstáculo.
+Perigos do Trajeto
+28
+Exemplo de área onde é permitida a colocação de 
+obstáculos distante da borda
+     15 cm
+
+--- PAGE 29 ---
+Caderno Verde - O Desaﬁo
+❖ Não há especiﬁcações para lombadas, que podem variar de 
+tamanho e angulação, servindo como “detrito” no percurso do 
+robô. O tamanho máximo de uma lombada é de 30 cm  X 30 cm.
+Lombada (Redutor de Velocidade)
+Lombadas terão a altura de 1 cm ou menos, podem 
+ser de qualquer formato, serão brancos, ﬁxos e 
+colocadas em qualquer lugar em um determinado 
+ladrilho, pontuando 10 pontos cada ladrilho 
+quando superadas pelo robô, independente de 
+quantas lombadas tenha neste ladrilho.
+10 Pontos
+● Podem ser alocados na área de percurso, rampa, e trajeto de saída;
+● Será considerada a pontuação de lombada(s) quando mais da 
+metade do robô, se visto de cima, está dentro do próximo ladrilho e 
+o robô está seguindo a linha. 
+Ladrilho com 
+múltiplas lombadas.
+Perigos do Trajeto
+29
+
+
+--- PAGE 30 ---
+Caderno Verde - O Desaﬁo
+❖ Gaps são colocados em trechos de linha reta do percurso.
+Gap (Lacuna)
+Gaps (ou lacunas) são “falhas” na linha do percurso 
+e podem existir uma ou mais dentro de um mesmo 
+ladrilho. Pontua-se 10 pontos para cada ladrilho 
+superado pelo robô, independentemente do 
+número de gaps presentes no ladrilho.
+O comprimento do gap não será superior a 10 cm.
+10 Pontos
+● Será considerada a pontuação de uma gap caso metade do robô 
+alcance o ladrilho seguinte quando visto de cima e continue a 
+seguir linha.
+● Os gaps devem ser sempre em linhas retas, com pelo menos 5 cm 
+de linha reta antes da gap (medido a partir da parte mais curta da 
+parte reta da linha).
+Gap vista de 
+cima.
+Perigos do Trajeto
+30
+
+--- PAGE 31 ---
+Caderno Verde - O Desaﬁo
+❖ A angulação da rampa não excederão a inclinação de 25 graus (+ 
+ou - 1 grau) em relação a horizontal.
+Rampa
+Os ladrilhos serão usados como rampas para 
+permitir que os robôs ‘subam’ e ‘desçam’ em 
+diferentes níveis. A rampa pode ter qualquer 
+comprimento e pode estar no trajeto de entrada ou 
+trajeto de saída, ou entre os ladrilhos e sala de 
+resgate, deve ter a largura de aproximadamente 
+30 cm e pode ou não conter paredes de até 20 cm 
+de altura ou anteparos que evitem a queda dos 
+robôs. Numa superação será atribuído 10 pontos. 
+A pontuação de rampa será obtida a cada ladrilho 
+rampa individual superado, ao invés da rampa 
+inteira. 
+10 Pontos
+● Ao longo da linha das rampas podem incluir Gaps, Lombadas, 
+intersecções ou beco sem saída;
+● Será considerada a pontuação de uma rampa caso metade do robô 
+visite o ladrilho seguinte quando visto de cima (subindo ou 
+descendo) e seguindo a linha após um ladrilho rampa, ou ao término 
+da rampa.
+● A rampa NÃO deve ter um declive imediatamente após uma sessão 
+de subida, criando uma estrutura de linha de pico ou vice-versa.
+Ladrilho inclinado 
+de linha reta.
+Perigos do Trajeto
+31
+
+
+--- PAGE 32 ---
+Caderno Verde - O Desaﬁo
+❖ As dimensões da marcação verde estão deﬁnidas pela plataforma.
+Interseção com Marcações
+Interseções com Marcações são caminhos de 3 ou 
+4 ramiﬁcações presentes no percurso no qual o 
+robô deve seguir o sentido indicado pelo marcador 
+de cor verde diretamente anterior à interseção 
+para alcançar  10 pontos.
+A marcação verde deverá ser verde e ter 2,5cm x 
+2,5cm logo antes do cruzamento (na região interna 
+da curva) para indicar a direção que o robô deverá 
+seguir.
+10 Pontos
+● A interseção será considerada superada (e sua pontuação dada) 
+quando o robô seguir o caminho indicado pela marcação verde e 
+caso metade do robô visite o ladrilho seguinte quando visto de 
+cima e está seguindo linha.
+● Será considerada Falha de Progresso caso o robô não execute 
+corretamente uma interseção, seguindo o caminho errado.
+Interseção com 
+marcação vista de cima
+Exemplos de Interseções
+Perigos do Trajeto
+32
+Exemplos de Interseções com ou 4 ramiﬁcações
+
+--- PAGE 33 ---
+Caderno Verde - O Desaﬁo
+Interseções sem Marcações são caminhos de 3 ou 
+4 ramiﬁcações presentes no percurso no qual o 
+robô deve seguir reto para alcançar  10 pontos, 
+mesmo que haja um marcador de cor verde 
+diretamente após a interseção.
+Interseção sem Marcações 10 Pontos
+● A interseção será considerada superada, e sua pontuação dada, 
+quando o robô seguir reto e mais da metade do robô já está no 
+próximo ladrilho (quando visto de cima) e está seguindo linha. 
+● Será considerada Falha de Progresso caso o robô não execute 
+corretamente uma interseção, seguindo o caminho errado.
+Exemplos de Interseções 
+sem marcação.
+Perigos do Trajeto
+33
+Interseção sem 
+marcação vista de cima
+
+--- PAGE 34 ---
+Caderno Verde - O Desaﬁo
+❖ Para especiﬁcações da marcação verde, ver o perigo: Interseção 
+com Marcação.
+Beco Sem Saída
+Beco sem saída são duas marcações de cor verde 
+antes de uma intersecção no trajeto do robô, onde 
+o robô deve seguir o sentido oposto pelos 
+marcadores de cor verde diretamente anterior à 
+interseção para alcançar  10 pontos.
+● O Beco sem Saída será considerado superado (e sua pontuação 
+dada) quando o robô seguir o caminho oposto indicado pelas duas 
+marcações verdes e metade do robô visite o ladrilho seguinte 
+quando visto de cima e voltar a seguir linha de onde veio
+●  Será considerada Falha de Progresso caso o robô não execute o 
+comando corretamente no perigo em questão, seguindo o caminho 
+errado.
+10 Pontos
+Beco sem saída 
+visto de cima.
+Perigos do Trajeto
+34
+Exemplo de Beco sem 
+Saída.
+
+--- PAGE 35 ---
+Caderno Verde - O Desaﬁo
+❖ Passagens são ﬁxas ao piso e ocupam um espaço horizontal menor 
+que um ladrilho.
+Passagem
+Passagem é um perigo formado por 3 pedaços 
+sólidos de madeira, na cor laranja, com pelos 
+menos 25 cm de largura e 25 cm de altura que 
+pode ser colocado em linhas retas, e precisam ser 
+superadas, porém não atribuem pontuação.
+0 Pontos
+● Caso o robô não consiga ultrapassar a passagem, será considerada 
+Falha de Progresso.
+Passagem.
+Perigos do Trajeto
+35
+
+--- PAGE 36 ---
+Caderno Verde - O Desaﬁo
+❖ Gangorras são ladrilhos com angulação, e seu pivô é ﬁxo ao piso.
+Gangorra
+Ladrilhos de linha reta sem elementos pontuáveis 
+inclinados em um pivô atuam como gangorras, que 
+quando superadas pontuam 20 pontos.
+A gangorra é composta por um ladrilho que pode 
+girar em torno de uma dobradiça colocada no 
+centro do ladrilho.
+A gangorra terá uma inclinação de 
+aproximadamente 20 graus quando inclinada para 
+um lado (+-2 graus).
+20 Pontos
+● A pontuação só será dada caso o robô as complete com sucesso, 
+atravessando de uma ponta a outra da mesma e metade do robô 
+visite o ladrilho seguinte quando visto de cima e o robô está 
+seguindo linha.
+● Quando ocorre uma Falha de Progresso,  e a gangorra já tiver sido 
+movimentada pelo robô, ela voltará para a sua posição inicial.
+Gangorra vista
+de lado
+Perigos do Trajeto
+36
+
+
+--- PAGE 37 ---
+Caderno Verde - O Desaﬁo
+❖ A faixa vermelha inicia-se no centro do ladrilho e estende-se 
+horizontalmente de uma ponta a outra no mesmo, possuindo no 
+mínimo a espessura da linha escura em si.
+Ladrilho de Chegada
+O ladrilho de chegada é o último ladrilho do 
+percurso, pontos serão obtidos quando o robô 
+atingir o ladrilho e ﬁcar completamente parado 
+por ao menos 5 segundos. A pontuação dada 
+corresponde a no Máximo 60 pontos, diminuindo 
+5 a cada Falha de Progresso/Nova T entativa 
+realizada no percurso pelo robô.
+Max. 60 Pontos
+● Caso o robô não pare diretamente na faixa vermelha ou passe 
+direto, será considerada uma Falha de Progresso. 
+● A pontuação do ladrilho de chegada não pode ser negativa e é dado 
+por:
+Ladrilho de chegada = 60 - 5 x (quantidade de falhas de progresso)
+Ladrilho visto 
+de cima
+Perigos do Trajeto
+37
+
+--- PAGE 38 ---
+Caderno Verde - O Desaﬁo
+Resgate é o ápice da tarefa dada ao robô, 
+onde o mesmo deve resgatar as vítimas 
+(explicado a seguir neste caderno) em 
+uma área segura triangular (a Área de 
+Resgate).
+A linha escura termina na entrada da Sala 
+de Resgate, demarcada por uma ﬁta de 
+cor prata ou prata reﬂexiva de 
+aproximadamente 25 mm x 250 mm, 
+iniciando novamente após a saída da 
+mesma, demarcada por uma ﬁta de cor 
+preta de aproximadamente 25 mm x 250 
+mm).
+A Sala de Resgate possui aproximadamente 90cm x 90 cm ou 120 cm x 
+90 cm (equivalente ao tamanho, 3x3 ou 3x4 ladrilhos), com paredes nos 4 
+lados de, no mínimo, 10 cm de altura e com a cor clara (branca ou próximo 
+de branca), como no exemplo abaixo:
+Resgate (Sala de Resgate)
+Sala de Resgate
+(ou Zona de Resgate)
+Área de Resgate
+(ou Ponto de Resgate)
+38
+Área de Resgate
+(ou Ponto de Resgate)
+Exemplo de uma sala de resgate 
+3 x 4 ladrilhos
+Na entrada para a sala de salvamento, há uma tira de ﬁta prata e a entrada 
+(porta) da sala de resgate é opcional, e, se estiver presente, deve ter 25 cm 
+de largura e altura, e estará centralizada em relação a rampa (robôs com 
+mais de 25cm não passarão na entrada da sala de resgate. A entrada da 
+sala de resgate NÃO é pontuada.
+
+--- PAGE 39 ---
+Caderno Verde - O Desaﬁo
+Assim como no trajeto demarcado com a linha, o resgate dispõe de várias 
+tarefas que devem ser realizadas pelo robô para alcançar multiplicadores, 
+esses serão melhor explicados na seção de Multiplicadores de Resgate 
+deste caderno.
+Nome do Componente (Nome Alternativo)
+Modelo de detalhamento dos componentes de resgate presentes neste 
+caderno:
+Imagem do 
+Componente
+Descrição sobre o componente.
+● Informações adicionais utilizadas para especiﬁcar melhor 
+diferenças entre níveis e outras informações.
+❖ Especiﬁcações técnicas serão apresentadas em verde.
+Imagem adicional 
+do Componente
+Imagem adicional 
+do Componente
+Imagem adicional 
+do Componente
+Componentes de Resgate
+39
+
+--- PAGE 40 ---
+Caderno Verde - O Desaﬁo
+❖ Os lados do triângulo retângulo são do tamanho de 30 cm x 30 cm  
+de lado. A área de resgate possui uma elevação em sua entrada 
+(aresta que não toca a parede), onde para as equipes de Nível 1 é 
+uma pequena barreira de 5 mm, e para as equipes de Nível 2 
+corresponde a uma barreira de 6 cm e um centro oco.
+Área de Resgate (parte 1)
+A área de resgate é um triângulo retângulo, onde 
+as Vítimas devem ser entregues para a atribuição 
+de multiplicadores, explicados na seção de 
+Multiplicadores de Resgate. Vítimas 
+completamente dentro da área de resgate que 
+não estejam mais em contato com o robô serão 
+consideradas resgatadas.
+● A área de resgate será colocada em uma das quinas da Sala de 
+Resgate, que não estejam sendo bloqueadas pela entrada ou saída.
+● Após uma Falha de Progresso a Área de Resgate pode ser 
+aleatorizada para um dos cantos, não obstruídos, da Sala de 
+Resgate.
+Área de resgate 
+visto de cima
+Componentes de Resgate
+40
+5mm 6cm
+6cm
+Áreas de resgate para equipes de Nível 1.       Áreas de resgate para equipes de Nível 2. 
+
+--- PAGE 41 ---
+Caderno Verde - O Desaﬁo
+Área de Resgate (parte 2)
+As áreas de resgate serão colocadas pelo árbitro, 
+aleatoriamente, em quaisquer dos cantos da sala 
+de salvamento que não tenha entrada/saída da 
+sala de resgate.
+Após uma falha de progresso, o árbitro pode 
+novamente reposicionar as áreas de resgate em 
+um novo canto
+● As áreas de resgate serão ﬁxas no chão, mas as equipes devem 
+estar preparadas para pequenos movimentos na área de resgate. 
+● A entrada e saída da sala de resgate pode existir em qualquer 
+parede e posição da sala de resgate
+Área de resgate 
+visto de cima
+Componentes de Resgate
+41
+30 cm
+30 cm
+Entrada da 
+sala de resgate
+Entrada da 
+sala de resgate
+Entrada da 
+sala de resgate
+Áreas de 
+resgateÁreas de 
+resgate
+Alguns exemplos de posicionamentos das áreas de resgate (existem mais possibilidades)
+
+
+--- PAGE 42 ---
+Caderno Verde - O Desaﬁo
+❖ Vítimas são pequenas esferas leves que possuem uma textura 
+dependendo de seu tipo.
+Vítimas
+Vítimas representam uma pessoa e serão 
+feitas usando esferas de 4 a 5 cm de 
+diâmetro, ocas ou maciças. São divididas em 
+dois tipos: Vítimas Vivas, cobertas de 
+material prateado condutor, e Vítimas 
+Mortas, cobertas de material escuro isolante. 
+Vítimas vivas devem ser entregues 
+preferencialmente à Área de Resgate Verde 
+e as vítimas mortas devem ser entregues 
+preferencialmente à Área de Resgate 
+Vermelha para a atribuição de 
+multiplicadores, explicados na seção de 
+Multiplicadores de Resgate. 
+● As vítimas serão posicionadas pelos juízes, logo após o robô iniciar 
+sua trajetória na área de percurso podem estar localizadas em 
+qualquer lugar no piso da sala de resgate, inclusive próximas às 
+paredes;
+● As vítimas não precisam ser salvas uma a uma;
+● Caso haja um salvamento o juiz deverá remover cada vítima 
+posicionada na área de resgate com sucesso, assim que identiﬁcar 
+que não estará mais interferindo na ação do robô;
+● A pontuação será considerada se o robô posicionar a vítima 
+corretamente na área de resgate, perder o contato com ela e sair da 
+área sem a vítima, 
+● A pontuação NÃO será considerada se o robô posicionar a vítima 
+corretamente e sair da área de resgate com a vítima;
+● Após o resgate de uma vítima não será mais possível modiﬁcar a 
+posição da mesma;
+● Serão exatamente duas Vítimas Vivas e uma Vítima Morta.
+Vítimas como vistas na 
+Sala de Resgate
+Componentes de Resgate
+42
+
+--- PAGE 43 ---
+Caderno Verde - O Desaﬁo
+Multiplicadores são dados quando vítimas são entregues na Área de 
+Resgate, isso é, estão completamente dentro da área segura, vermelha 
+ou verde, e não estão mais em contato com o robô. Quando o árbitro 
+determinar que houve um resgate bem-sucedido, nesse momento a vítima 
+será removida para não atrapalhar a continuidade da execução. Esses 
+multiplicadores são acumulados e multiplicados pela pontuação total ao 
+ﬁm da execução do desaﬁo (ver seção Fim da Rotina).
+Resgate de uma vítima morta entregue na área de resgate 
+Vermelha
+Resgate de uma vítima viva entregue na área de resgate 
+Verde × 1.3
+× 1.3
+Resgate de Vítimas - Nível 1 e 2:
+Multiplicadores de Resgate
+43
+Resgate de uma vítima viva ou morta entregue na área de 
+resgate invertida × 1.1
+
+--- PAGE 44 ---
+Caderno Verde - O Desaﬁo
+T entativas fracassadas de superar os desaﬁos do trajeto da arena ou 
+comportamentos inesperados do robô no percurso, são deﬁnidas como 
+FALHA DE PROGRESSO.
+Cada falha de progresso será contabilizada uma nova tentativa em um 
+determinado checkpoint, o último superado pelo robô. 
+É considerada uma Falha de Progresso:
+● Quando o capitão da equipe declara uma Falha de Progresso 
+manualmente;
+● Quando o robô perde a linha escura ou ﬁca parado por 10 segundos;
+● O robô subir a rampa, nitidamente, sem seguir linha;
+● Quando qualquer condição de Falha de Progresso descrita em 
+algum Perigo do percurso é satisfeita;
+● Quando o robô atinge uma linha que não está na sequência 
+planejada, ou se perde e não encontra a linha no mesmo ou no 
+ladrilho da sequência.
+Observações:
+● No caso do capitão do time indicar aos juízes a desistência da equipe 
+anunciando FIM DA RODADA e retirar o robô da arena, todos os 
+pontos conquistados pela equipe serão considerados, mas seu 
+tempo de prova, para efeito de desempate, será o tempo máximo da 
+prova (5 minutos). A equipe poderá solicitar o FIM DA RODADA a 
+qualquer momento;
+Após uma Falha de Progresso, o robô e a sua programação serão 
+reiniciadas e executadas novamente.
+Falhas de Progresso (T entativas – parte 1)
+44
+
+
+--- PAGE 45 ---
+Caderno Verde - O Desaﬁo
+Após uma Falha de Progresso, a equipe deve executar o processo 
+informado ao árbitro antes do início da rodada podendo reiniciar a fonte de 
+alimentação, desligar e ligar o robô, usando um interruptor/botão em um 
+local visível pelo árbitro, e, em seguida, reiniciar o programa. A equipe não 
+tem permissão para alterar o programa, fornecer informações sobre o 
+percurso ao robô ou reparar o robô. 
+● Se a Falha de Progresso ocorre na sala de salvamento, todas as 
+vítimas, incluindo as que rolaram, permanecem em sua posição 
+atual. Vítimas que estavam em posse do robô, serão reposicionadas 
+aproximadamente na localização do robô quando a Falha de 
+Progresso ocorreu. Se ocorrer uma Falha de Progresso quando o 
+robô estiver fora da sala de salvamento transportando vítimas, as 
+vítimas serão recolocadas aleatoriamente na sala de salvamento. 
+● Qualquer gangorra à frente do caminho do robô será movida para a 
+direção favorável quando uma falha de progresso for anunciada.
+Falhas de Progresso (T entativas – Parte 2)
+45
+● O robô executa uma tentativa mal sucedida de ultrapassar algum dos 
+elementos da arena, por exemplo: 
+- O robô não conseguir contornar o obstáculo com sucesso, 
+derrubá-lo ou empurrá-lo por mais de 1 cm; ou 
+- O robô não seguir o caminho correto em uma intersecção ou 
+beco sem saída; ou
+- O robô não ser capaz de passar pela entrada da sala de resgate 
+ou por uma passagem; ou
+- O robô derrubar uma passagem.
+● Quando uma Falha de Progresso ocorre, o robô deve ser posicionado 
+atrás da linha do ladrilho que contém o último marcador de percurso 
+superado (checkpoint) voltado para o caminho em direção ao 
+Ladrilho de chegada e checado pelo árbitro, considerando este 
+reinício uma NOVA TENTA TIVA. O primeiro percurso é uma 
+exceção, onde o recomeço é no ladrilho ponto de partida.
+● A partir da terceira tentativa a equipe deverá avançar para a 
+primeira tentativa do próximo checkpoint no percurso;
+● Após uma Falha de Progresso, comportamentos relacionados às 
+falhas descritos nos Perigos do trajeto serão realizados.
+
+--- PAGE 46 ---
+Caderno Verde - O Desaﬁo
+Um checkpoint é um ladrilho demarcado no qual o robô será 
+manualmente colocado após uma Falha de Progresso.
+Checkpoints não estarão posicionados em ladrilhos que possuem 
+elementos pontuáveis.
+O Ladrilho de Partida em si é um 
+checkpoint no qual o robô inicia-se.
+Um marcador de checkpoint é um 
+pequeno objeto cilíndrico de cor laranja 
+usado para marcar quais ladrilhos são 
+checkpoints.
+Um marcador de percurso estará posicionado em um ladrilho checkpoint 
+no qual o robô será colocado de volta manualmente quando ocorrer uma 
+falha de progresso. O marcador pode ser feito de qualquer material como 
+EVA, madeira ou plástico no formato circular com 2 mm a 5 mm de 
+espessura e 30 mm (+/- 3 mm) de diâmetro ou no formato de seta. O 
+marcador deverá ser da cor laranja.
+O número de checkpoints e seus locais será predeterminado pelo 
+elaborador do desenho da arena  e esta quantidade pode variar a cada 
+rodada. Isso vai depender do comprimento do percurso.
+Referência de um 
+Ladrilho Checkpoint.
+O checkpoint será considerado alcançado quando o robô entrar no ladrilho 
+em questão.
+Checkpoints (Pontos de partida)
+46
+Exemplos de marcadores de percurso.
+NÍVEL 0: No início da rodada, o árbitro posicionará o(s) marcador(es) de 
+percurso, de acordo com o objetivo selecionado para aquela rodada.
+NÍVEIS 1 E 2: No início da rodada, o árbitro posicionará o(s) marcador(es) 
+de percurso.
+
+--- PAGE 47 ---
+Caderno Verde - O Desaﬁo
+Quando um robô alcança um Ladrilho Checkpoint ele ganhará pontos para 
+cada ladrilho que passou desde o último checkpoint. A pontuação por 
+ladrilho dependerá de quantas tentativas o robô fez para alcançar o 
+checkpoint, visível abaixo junto com um desenho que simula uma 
+execução.
+Superar o ladrilho de início 5 pontos
+Superar um marcador de percurso na 1ª tentativa 5 Pontos por Ladrilho
+Superar um marcador de percurso na 2ª tentativa 3 Pontos por Ladrilho
+Superar um marcador de percurso na 3ª tentativa 1 Ponto por Ladrilho
+Pontuação de Checkpoints
+47
+
+
+--- PAGE 48 ---
+Caderno Verde - O Desaﬁo
+Consiste em um desaﬁo de programação e mudança no comportamento 
+do robô que deverá ser demonstrado durante a rodada, e será conhecido 
+pela equipe 30 minutos antes do robô entrar na arena, no 2º e 3º rounds.
+Desaﬁo Surpresa - Somente na fase Estadual (Parte 1)
+48
+O DESAFIO SURPRESA tem o caráter de complementar a pontuação de 
+equipes que demonstrem a capacidade de implementar soluções 
+computacionais simples em um curto intervalo de tempo. Portanto, por 
+não apresentar qualquer caráter punitivo, o DESAFIO SURPRESA é 
+opcional para as equipes, ou seja, cada equipe pode optar por executar o 
+DESAFIO SURPRESA ou não.
+O DESAFIO SURPRESA acontecerá da seguinte forma:
+1. 30 minutos antes da 2ª e 3ª rodada programada de cada equipe, o 
+capitão da equipe deve se apresentar a um Juiz de Desaﬁo, na área 
+das arenas;
+1. O Juiz de Desaﬁo irá sortear um DESAFIO SURPRESA para a equipe, 
+utilizando, o Sistema de Pontuação OBR instalado em um 
+computador/notebook ou dispositivo móvel (celular ou tablet);
+1. O capitão da equipe deve registrar o DESAFIO SURPRESA sorteado, 
+com papel ou foto;
+1. A equipe terá os 30 minutos mencionados acima para voltar para sua 
+mesa, reprogramar o robô para cumprir o DESAFIO SURPRESA, e se 
+apresentar para a rodada. Deve-se observar que estes 30 minutos 
+contemplam o tempo de deslocamento da equipe e o tempo de 
+programação para resolver o DESAFIO SURPRESA;
+1. Caso a equipe não compareça no horário marcado para o sorteio, o 
+Sistema de Pontuação não permitirá obter pontos no DESAFIO 
+SURPRESA naquela rodada;
+1. A equipe pode decidir não realizar o DESAFIO SURPRESA, antes ou 
+após o sorteio, e assim não receberá o multiplicador complementar 
+relativa à realização do DESAFIO SURPRESA. Essa decisão pode ser 
+tomada de forma independente a cada rodada;
+
+
+--- PAGE 49 ---
+Caderno Verde - O Desaﬁo
+Desaﬁo Surpresa (Parte 2)
+49
+7. A rodada ocorrerá normalmente, na hora marcada, sendo que a 
+equipe deve mostrar seu robô executando o DESAFIO SURPRESA 
+durante a rodada, caso queira obter o multiplicador complementar.
+8. Os desaﬁos não serão divulgados previamente, entretanto a 
+organização esclarece que os desaﬁos serão tarefas de 
+programação de diﬁculdade compatível com o tempo proposto.
+Será concedido um multiplicador adicional para o Desaﬁo surpresa 
+solucionado e demonstrado durante os 5 minutos de cada rodada, como 
+tal:
+Nível 1 e Nível 2 – Desaﬁo Surpresa
+X 1,5 Por desaﬁo surpresa demonstrado durante os 5 minutos de 
+cada rodada. 
+Atenção: As equipes podem ser acompanhadas dos organizadores do 
+evento ou juízes durante a programação do desaﬁo surpresa, para que 
+seja certiﬁcada a autoria da programação pelos alunos.
+
+--- PAGE 50 ---
+Caderno Verde - O Desaﬁo
+A Rotina inicia-se quando a equipe decide executar sua programação. O 
+robô então é posicionado no Ladrilho de Partida e deve começar a 
+navegar pelo trajeto, superando os perigos e realizando o resgate de 
+vítimas e ﬁnalizando com o Ladrilho de Chegada de forma autônoma 
+(como já descrito em outras seções deste caderno).
+A trajetória das linhas oﬁciais de cada etapa da competição não será 
+divulgada previamente em hipótese alguma. Assim, a capacidade do robô 
+seguir um caminho desconhecido faz parte do desaﬁo.
+Observações:
+● O tempo de execução da Rotina é de 5 minutos;
+● Alguns elementos como curvas, tamanho de obstáculos e outras 
+pequenas alterações podem ser realizadas  anteriormente ao início 
+da Rotina, para evitar pré-mapeamento do desenho;
+● O robô não será alterado durante a Rotina, incluindo o 
+posicionamento de seus componentes como o Atuador.
+A equipe não tem permissão para mudar o programa ou alterar o robô 
+após o início da Rotina.
+Rotina
+50
+
+--- PAGE 51 ---
+Caderno Verde - O Desaﬁo
+A pontuação ﬁnal será arredondado para cima até o inteiro mais próximo 
+do resultado calculado a partir da fórmula abaixo:
+A equipe pode optar para parar a Rodada a qualquer momento, fazendo 
+com que a pontuação e multiplicadores a serem consideradas sejam 
+aquelas obtidas até o momento da desistência total da Rodada, e seu 
+tempo de execução, para efeito de desempate, será o tempo máximo da 
+Rodada (5 minutos). Neste caso, o capitão da equipe deve indicar ao 
+árbitro o desejo da equipe de ﬁnalizar a rodada.
+Pontuação = (Pontuações do Trajeto + Ladrilho de chegada) x 
+(Multiplicadores de Resgate E Desaﬁo Surpresa (Fase estadual))
+* Multiplicação de todos os multiplicadores obtidos.
+Pontuação Final
+A Rodada se encerra quando o robô alcança o ladrilho de chegada, e ﬁca 
+completamente parado por 5 segundos.
+Fim da Rodada
+51
+A Rodada também se encerra após 5 minutos (300 segundos), parando 
+qualquer execução independente do local e considerando tudo o que foi 
+obtido até o momento da parada. 
+
+--- PAGE 52 ---
+Caderno Verde - O Desaﬁo
+As tarefas de Nível 0 são deﬁnidas como partes do desaﬁo original. São 
+exemplos de tarefas que podem ser propostas às equipes de Nível 0:
+1.  Seguir a linha por 15 segundos sem se perder;
+2.  Seguir a linha que contém um gap e/ou redutores, partindo de um 
+ponto inicial até um ponto ﬁnal deﬁnidos;
+3.  Subir ou descer uma rampa completamente;
+4.  Reconhecer um obstáculo, parar e emitir um sinal;
+5.  Identiﬁcar uma vítima na sala de resgate, parar e emitir um sinal;
+6.  Identiﬁcar um marcador verde, parar e emitir um sinal;
+7.  Identiﬁcar um marcador verde e realizar a alteração de trajeto 
+indicada;
+8. Explicar ao juiz como funciona seu robô, etc.
+Para cada rodada, haverá uma tarefa diferente a ser realizada pelo robô 
+envolvendo um dos elementos da arena, percurso, salvamento ou saída,  
+selecionada previamente pela comissão de arbitragem. Os robôs poderão 
+receber a seguinte pontuação a cada rodada, com base nos desaﬁos 
+apresentados. Cada equipe participará de, pelo menos, 3  rodadas, sendo 
+que em cada uma delas será apresentado um desaﬁo distinto. T odas as 
+rodadas podem acontecer em uma mesma arena, dependendo do número 
+de equipes inscritas e do cronograma estabelecido. É importante destacar 
+que todas as equipes serão submetidas aos mesmos desaﬁos naquele 
+evento, podendo a ordem de apresentação ser sorteada. 
+Pontuação – Nível 0
+52
+Pontuação sobre as tarefas deﬁnidas para Nível 0 Pontuação
+Tarefa realizada com sucesso na primeira tentativa REALIZADO
+Tarefa realizada com sucesso na segunda tentativa REALIZADO
+Tarefa realizada com sucesso na terceira tentativa REALIZADO
+Após a terceira FALHA DE PROGRESSO, um membro da 
+equipe conseguir demonstrar conhecimento explicando 
+ao árbitro qual a estratégia aplicada e/ou a causa da 
+FALHA DE PROGRESSO e possível solução.
+EM 
+DESENVOLVIMENTO
+Após a terceira FALHA DE PROGRESSO, nenhum 
+membro da equipe tiver conhecimento da estratégia 
+aplicada nem da causa da FALHA DE PROGRESSO.
+NÃO REALIZADO
+
+--- PAGE 53 ---
+Caderno Verde - O Desaﬁo
+As equipes devem esperar que as condições do ambiente do torneio 
+sejam diferentes de sua arena de treino. As equipes devem vir preparadas 
+para ajustar e calibrar seus robôs para as condições do local, que podem 
+ter condições de iluminação e magnéticas variar ao longo do curso da 
+arena e durante o dia da competição. 
+A arena pode ser afetada por campos magnéticos (por exemplo, gerados 
+pela ﬁação do chão e objetos metálicos). As equipes devem preparar seus 
+robôs para lidar com tais interferências. 
+A arena pode ser afetada por interferências inesperadas de iluminação 
+(por exemplo, o ﬂash de câmera de espectadores ou sol). As equipes 
+devem preparar seus robôs para lidar com tais interferências.
+T odas as medidas sugeridas neste manual têm uma tolerância de mais ou 
+menos 10%, salvo indicação especíﬁca.
+Condições de Ambiente
+53
+
+
+--- PAGE 54 ---
+Caderno Vermelho - A Competição
+Caderno Vermelho
+A Competição
+Regras gerais, limitações e funcionamento da competição e 
+seu(s) sistema(s).
+54
+
+--- PAGE 55 ---
+Caderno Vermelho - A Competição
+As equipes serão compostas por no mínimo 2 estudantes até um máximo 
+de 4 estudantes, mais um professor ou técnico, vinculadas ou não a uma 
+instituição de ensino (equipes de garagem). T odos os estudantes devem 
+pertencer a um, e somente um, dos níveis: 
+Equipe
+55
+● Nível 0: Para estudantes do 1º ao 3º ano do Ensino Fundamental. 
+Participam da etapa local (Regional ou Estadual);
+● Nível 1: Para estudantes do 1º ao 8º ano do Ensino Fundamental. 
+Participam da etapa estadual, podendo avançar a Etapa Nacional;
+● Nível 2: Para estudantes do 8º e 9º ano do Ensino Fundamental e 
+Ensino Médio ou T écnico Integrado, com no máximo 19 anos em 1 de 
+julho de 2026. Participam da etapa estadual, podendo avançar até a 
+Etapa Nacional e concorrer à vaga na Etapa Internacional da 
+RoboCup Jr 2026.
+Um estudante pode ser registrado em apenas uma equipe na Modalidade 
+Resgate Presencial. A equipe deve estar relacionada a somente um nível  
+(0, 1 ou 2) da modalidade resgate presencial.
+Não são permitidas alterações em equipes após o ﬁm do prazo para 
+inscrições. Só podem ser realizadas alterações em uma equipe que ﬁcou 
+com apenas um aluno. Se ﬁcou apenas um aluno participante na equipe, 
+podemos alterar a formação para que este aluno não seja prejudicado. 
+Neste caso, entre em contato com a organização pelo email 
+obr@robocup.org.br. Quaisquer divergências ou inconsistências no 
+cadastro dos membros inscritos originalmente no sistema Olimpo para o 
+sistema de competição, acarretará na desclassiﬁcação da equipe.
+Informações de como inscrever as equipes estão disponíveis no 
+website da OBR.
+
+
+--- PAGE 56 ---
+Caderno Vermelho - A Competição
+A utilização de robôs ou programações criadas por outras equipes não é 
+permitida. Os mentores, tutores e professores do colégio ou da equipe 
+devem sempre incentivar o cumprimento do desaﬁo pelos estudantes e 
+não realizar as tarefas para eles apenas com o intuito de ganhar a 
+competição. Incentivamos o compartilhamento de projetos de robôs e 
+programações entre equipes com o objetivo de disseminar o 
+conhecimento, auxiliar equipes iniciantes, ensinar, mas não para que as 
+programações sejam reutilizadas de forma parcial ou integral por outras 
+equipes.
+Trabalho em Equipe
+56
+Adultos (mentores, técnicos, professores, pais, responsáveis) não estão 
+autorizados a programar ou se envolver na programação dos robôs, 
+enﬁm, fazer o trabalho pelos estudantes durante o período de preparo da 
+competição. Os estudantes deverão ser capazes de estudar e programar 
+apenas com a mediação de um adulto.
+Destaca-se que cada equipe deve ter seu robô e desenvolver sua própria 
+programação, sendo a programação dos robôs sujeita à inspeção dos 
+juízes a qualquer momento. Assim, os códigos dos robôs devem ser 
+diferentes, bem como a estrutura e os componentes da montagem dos 
+robôs também devem ser diferentes. Qualquer robô que pareça ser 
+idêntico a outro robô pode ser solicitado uma inspeção.
+
+
+--- PAGE 57 ---
+Caderno Vermelho - A Competição
+Introdução
+57
+Neste caderno, serão apresentados os detalhes sobre como se deﬁnem 
+as etapas, as premiações, os campeões e as pontuações ﬁnais das 
+equipes nesta importante competição de robôs de resgate autônomos 
+inteligentes.
+Os competidores terão acesso a “arenas de treino” para a calibração, 
+testes e ajustes durante a competição. 
+Pré-Rodada
+As equipes deverão designar um membro do time que vai atuar como 
+"capitão" e o outro como “co-capitão”. Somente estes dois membros 
+terão permissão para acessar a área de competição (caso forem realizar a 
+calibragem), ou apenas o “capitão” de acordo com as regras e orientação 
+do árbitro. Somente o capitão da equipe poderá interagir com o robô 
+durante a rodada. 
+O capitão da equipe só poderá tocar no robô para movê-lo após sido 
+solicitado a fazê-lo, pelo árbitro. 
+Durante as rodadas, os demais membros da equipe ou qualquer outro 
+espectador devem manter-se atrás dos gradis de separação da arena 
+oﬁcial, a menos que sejam orientados ao contrário pelo árbitro. 
+Ninguém tem permissão para tocar nas arenas intencionalmente durante 
+uma rodada, sendo possível uma decisão dos juízes em cima dessa ação.
+Área de competição
+
+--- PAGE 58 ---
+Caderno Vermelho - A Competição
+Área de competição
+58
+T oda e qualquer atividade de pré-mapeamento resultará na 
+desclassiﬁcação imediata do robô para a rodada. Pré-mapeamento é o 
+ato de humanos fornecerem ao robô informações sobre o campo antes do 
+jogo. Por exemplo: localização de obstáculos, posição de entrada na sala 
+de salvamento, posição das áreas de resgate, número de ladrilhos após a 
+saída da sala de salvamento, etc.
+Na hora da rodada, cada equipe tem no máximo 2 minutos de calibração 
+e tempo máximo de 5 minutos para a rodada. O tempo da rodada nunca 
+para e será controlado pelo árbitro. 
+A calibração é deﬁnida pelo posicionamento do robô em qualquer lugar da 
+arena para obtenção de valores através das leituras dos sensores e a 
+modiﬁcação da programação do robô para acomodar tais valores. A 
+calibração não conta como pré-mapeamento. No momento da calibração 
+não é permitido que o robô execute qualquer teste de pista seguindo a 
+linha, navegando na arena de forma autônoma, apenas a programação 
+de rotina de calibração. T oda e qualquer atividade de pré-mapeamento irá 
+resultar em desclassiﬁcação imediata do robô para a rodada.
+Neste tempo de calibração, será permitida a entrada do capitão e 
+co-capitão da equipe na área de arenas oﬁciais. Após o tempo de 
+calibração, o co-capitão deverá retornar junto com os outros membros da 
+equipe.
+O tempo da rodada é deﬁnido como o tempo em que o robô está se 
+movendo de forma autônoma na arena, e o árbitro registrará as 
+pontuações.
+O horário de início de cada rodada deverá ser publicamente 
+disponibilizado pela organização local, bem como os resultados obtidos 
+nas rodadas anteriores. A rodada começa na hora programada de início, 
+estando ou não a equipe presente. O horário de início será publicado com 
+destaque ao redor do local da competição
+Início da Rodada (Parte 1)
+
+--- PAGE 59 ---
+Caderno Vermelho - A Competição
+Início da Rodada (Parte 2)
+59
+Uma vez iniciada a rodada, não será permitido que o robô saia da área de 
+competição por qualquer motivo.
+Estando a equipe pronta para iniciar a rodada, o capitão deve notiﬁcar o 
+árbitro. Para iniciar a rodada, o robô deve ser colocado sobre o ladrilho de 
+partida, conforme indicado pelo árbitro. Uma vez que a rodada começou, 
+não é permitida a calibração, isso inclui qualquer mudança e/ou seleção de 
+programação.
+A equipe devem apresentar ao juiz antes de sua rodada qual o 
+procedimento a ser realizado quando ocorrer FALHA DE PROGRESSO. 
+As equipes devem se ater a este método, independentemente da situação.
+O procedimento poderá ser reiniciar a fonte de alimentação, desligar e 
+ligar o robô, usando um interruptor/botão em um local visível pelo árbitro, 
+e, em seguida, reiniciar o programa. A equipe não tem permissão para 
+alterar o programa, fornecer informações sobre o percurso ao robô ou 
+reparar o robô. 
+As equipes podem optar por não calibrar o robô e, em vez disso, iniciar 
+imediatamente a rodada.
+Assim que o robô inicia a rodada, o árbitro pode determinar de forma 
+aleatória em quais cantos da sala de salvamento serão posicionadas as 
+áreas de resgate.
+Ladrilhos, obstáculos e outros elementos de pontuação podem ser 
+removidos, adicionados ou alterados quando o robô começa a se mover, 
+para evitar que as equipes mapeiem antecipadamente o layout dos 
+campos. Isso pode acontecer de forma aleatória deﬁnida pelo árbitro ou 
+com outro método de randomização anunciado pelos organizadores. Para 
+um campo especíﬁco durante uma rodada, o árbitro garantirá que a 
+diﬁculdade do campo seja mantida semelhante e que o máximo de pontos 
+seja constante.
+
+
+--- PAGE 60 ---
+Caderno Vermelho - A Competição
+Executando a Rodada
+60
+Para iniciar uma rodada, os robôs serão posicionados no local de largada 
+indicado na arena pelos juízes. O ladrilho de início, disponível na área de 
+percurso deverá ser o ponto de partida. Os robôs devem começar atrás da 
+junção entre o ladrilho de início e o próximo ladrilho, em direção à sala de 
+salvamento. O posicionamento correto será veriﬁcado pelo árbitro.
+Modiﬁcar o robô durante uma rodada é proibido. Isso inclui remontar 
+partes que tenham caído ou se soltado do robô, levantar ou abaixar a 
+garra, reposicionar qualquer elemento de hardware, ajustar esteiras ou 
+rodas que tenham desprendido, encaixar conectores, entre outros. É 
+proibido também reiniciar o robô com um programa diferente.
+T odas as partes do robô que se soltarem, intencionalmente ou não, devem 
+ser deixadas na arena até o ﬁnal da rodada. Nem a equipe nem o árbitro 
+podem retirar as partes do robô da arena durante uma rodada.
+Não é permitido aos times fornecerem qualquer informação antecipada 
+ao robô sobre a arena, ou inﬂuenciar, de alguma forma, seu desempenho 
+na arena. É proibido fornecer informações ao robô por meio de botões, 
+sensores ou qualquer outro dispositivo, durante a execução da rodada e 
+entre os procedimentos de reinício entre uma tentativa e outra. O robô 
+deve reconhecer os elementos da arena sozinho.
+Os robôs devem seguir a linha até imediatamente antes de entrar na sala 
+de salvamento, e em seguida, sair da sala de salvamento seguindo linha 
+em direção ao ladrilho de chegada.
+Fica deﬁnido que o robô alcançou um ladrilho quando mais da metade do 
+robô está dentro deste ladrilho, se visto de cima e o robô está seguindo a 
+linha neste momento.
+
+--- PAGE 61 ---
+Caderno Vermelho - A Competição
+Arenas diferentes para a competição
+61
+NÍVEL 0: Cada equipe participará de, pelo menos, 3 rodadas. Cada rodada 
+apresentará um desaﬁo diferente para o robô, selecionado previamente 
+pela comissão de arbitragem como um dos elementos da arena de 
+percurso ou da área de resgate. Dessa forma, todas as rodadas podem 
+acontecer em uma mesma arena, dependendo do número de equipes 
+inscritas e cronograma. T odas as equipes serão apresentadas aos 
+mesmos desaﬁos naquele evento, podendo ser sorteada a ordem de 
+apresentação. O número de rodadas (mínimo de 3) pode ser deﬁnido pelo 
+Organizador Local de acordo com o número de equipes inscritas e o 
+tempo disponível. 
+NÍVEIS 1 E 2: Sugere-se a realização de 3 rodadas em 3 arenas diferentes, 
+sendo que a menor pontuação será desconsiderada. Por isso é importante 
+que todas as arenas tenham pontuações máximas idênticas dentro de 
+cada nível. Caso haja chaves e fases, é importante tentar manter idênticas 
+as pontuações máximas das arenas mesmo que não haja descarte de 
+notas.
+As arenas podem e devem mudar de conﬁguração e de complexidade, 
+mantendo a pontuação máxima ﬁnal. É importante que se tenha tipos 
+diferentes de arenas, sendo pelo menos 1 com complexidade baixa, fácil, e 
+uma com complexidade alta, difícil.
+As equipes poderão, eventualmente, ser divididas em chaves e/ou fases 
+de acordo com a realidade e número de participantes de cada estado. 
+Por exemplo, pode-se usar as duas arenas mais simples para classiﬁcação 
+das melhores equipes e a arena mais difícil para deﬁnir o campeão apenas 
+para as equipes classiﬁcadas nas duas primeiras arenas. Em caso de 
+chaves, fases ou classiﬁcatórias, sugere-se que todas as pontuações 
+sejam utilizadas, sem descarte de notas. T oda e qualquer estruturação de 
+rodadas deve ser divulgada e acordada com as equipes, embasadas por 
+estas regras, antes do início da competição.
+A organização local, com a anuência da organização geral, realizará ampla 
+divulgação prévia aos responsáveis por equipes locais. A organização local 
+fará, antes do início das provas, uma reunião com representantes de todos 
+os grupos presentes para leitura das regras e sorteios dos times.
+
+--- PAGE 62 ---
+Caderno Vermelho - A Competição
+Qualquer violação das regras de inspeção impedirá a equipe de competir 
+até que as modiﬁcações sejam efetuadas e o robô passe por nova 
+inspeção.
+As modiﬁcações devem ser feitas observando os horários do cronograma 
+do torneio, pois as equipes não devem atrasar a competição devido às 
+modiﬁcações. 
+Se um robô não cumprir todas as especiﬁcações (mesmo com a 
+modiﬁcação), ele será desclassiﬁcado daquela rodada (mas não do 
+torneio).
+NENHUMA assistência de mentores/tutores durante a competição será 
+permitida. É preciso sempre ter em mente que o trabalho deve ser 
+realizado pelos estudantes. Caso exista assistência dos mentores (pais, 
+professores, ou outras pessoas estranhas ao grupo de alunos integrantes 
+do time) os times serão sumariamente desclassiﬁcados do torneio.
+Qualquer violação das regras pode ser penalizada pela desclassiﬁcação 
+do torneio ou da rodada ou pode resultar em perda de pontos a critério 
+dos árbitros e comitê organizador.
+Violações
+62
+
+
+--- PAGE 63 ---
+Caderno Vermelho - A Competição
+Os robôs serão examinados por uma equipe de juízes/árbitros antes do 
+início do torneio e também durante a competição para garantir que 
+atendam às restrições descritas nessas regras.
+É ilegal usar um robô que seja muito semelhante ao robô da equipe na 
+participação no ano anterior ou de outra equipe no mesmo ano de 
+competição.
+É de responsabilidade das equipes solicitar nova inspeção do seu robô, 
+caso este seja modiﬁcado em qualquer momento durante o torneio.
+Os alunos serão convidados a explicar o funcionamento do seu robô, a ﬁm 
+de veriﬁcar se a construção e a programação do robô são fruto de seu 
+próprio trabalho, além de avaliar tenham os robôs mais robustos, 
+inovadores e elegantes da competição (ver seção PREMIAÇÕES) em 
+etapas estaduais. O seu trabalho será avaliado de acordo com certos 
+elementos como criatividade, habilidade, simplicidade e funcionalidade. 
+T odas as equipes passarão por questionamentos sobre o funcionamento 
+dos seus robôs durante a competição. Cada membro da equipe precisará 
+explicar seu trabalho e deve ter uma função técnica especíﬁca
+Serão feitas perguntas aos alunos sobre os seus esforços de preparação, 
+e ainda poderão ser solicitados a responder questionários e participar de 
+entrevistas gravadas para ﬁns de pesquisa.
+Inspeção
+63
+Equipes que, sob qualquer alegação, ao serem convocados para a 
+entrevista se negarem a participar, estão passíveis de desclassiﬁcação 
+do torneio a critério do comitê organizador nacional.
+A interferência visível (visual) de um adulto na programação da equipe 
+poderá acarretar também na desclassiﬁcação da equipe.
+
+
+--- PAGE 64 ---
+Caderno Vermelho - A Competição
+NÍVEL 0: Não existem vencedores neste nível.
+NÍVEIS 1 e 2: Para indicar as equipes vencedoras em cada nível, as 
+pontuações das rodadas deverão ser consideradas, sendo cada rodada 
+realizada em uma arena diferente. Será declarada campeã a equipe que:
+1. Possuir a maior soma das duas maiores pontuações obtidas 
+considerando as 3 (três) rodadas (descarta-se a menor pontuação e 
+soma-se as outras duas) ou obter as maiores pontuações nas fases e 
+chaves previamente deﬁnidas.
+2. Em caso de empate no item 1, o desempate será dado pela soma dos 
+tempos nas 3 (três) rodadas realizadas. A equipe com a menor soma 
+de tempo é a vencedora.
+3. Em caso de novo empate, o desempate será dado pelo menor tempo 
+obtido de qualquer rodada de maior pontuação da equipe. A que 
+obteve o menor tempo, será a vencedora.
+4. Se ainda persistir o empate, o desempate será dado pela maior 
+pontuação obtida na rodada descartada.
+5. Se ainda persistir o empate, o desempate será dado pela maior  
+pontuação obtida na primeira rodada. Mantendo o empate, a maior 
+pontuação obtida na segunda rodada e mantendo, a maior 
+pontuação terceira rodada. A equipe que obteve a maior pontuação 
+seguindo a sequência de rodadas descritas, será a vencedora.
+6. Caso todos os critérios descritos nos itens anteriores não resolvam 
+o empate, uma regra a critério da Comissão Organizadora Nacional 
+será utilizada.
+Critérios para Deﬁnir os Vencedores
+64
+
+--- PAGE 65 ---
+Caderno Vermelho - A Competição
+As equipes classiﬁcadas para a Etapa Nacional serão alocadas em ordem 
+decrescente da pontuação máxima, por nível, de acordo com as vagas 
+ofertadas para cada estadual. 
+Classiﬁcação
+IMPORT ANTE: Não será alocada mais de uma vaga por unidade escolar 
+para um mesmo nível. Por exemplo: se o 1º e o 2º lugar do nível 1 da mesma 
+Etapa Estadual forem conquistados por equipes da escola e/ou tutor, 
+apenas a 1ª colocada terá vaga para a Etapa Nacional. No entanto, todas as 
+equipes receberão as medalhas da Etapa Estadual de acordo com sua 
+colocação. Este critério não se aplica para equipes de escolas com 
+múltiplas unidades. Além disso, não é permitido modiﬁcar os membros da 
+equipe classiﬁcada para a Etapa Nacional.
+65
+
+
+--- PAGE 66 ---
+Caderno Vermelho - A Competição
+NÍVEL 0: A cada desaﬁo realizado com sucesso, os membros da equipe 
+receberão do próprio juiz de arena um boton personalizado da OBR. T odos 
+os membros da equipe presentes no evento recebem uma medalha de 
+Honra ao Mérito durante a Cerimônia de Premiação. T odos os membros da 
+equipe presentes no evento recebem Certiﬁcado de Participação. Pode 
+haver prêmios especíﬁcos para esse nível por parte da Organização Local 
+e Patrocinadores. Equipes inscritas no Nível 0 não concorrem às 
+premiações extras e não são classiﬁcáveis para etapas seguintes. 
+NÍVEIS 1 e 2: T odos os membros da equipe presentes no evento recebem 
+Certiﬁcado de Participação. As equipes competindo nos Níveis 1 e 2 
+receberão medalhas caso ﬁnalizem a Etapa Regional/Estadual nas 3 (três) 
+primeiras colocações da competição, sendo que a 1ª receberá medalhas 
+de OURO, a 2ª receberá de PRA TA e a 3ª de BRONZE.
+Em Etapas Estaduais, cada nível (1 ou 2) do Estado que alcançar 10 ou 
+mais equipes participantes, terá o direito de concorrer a prêmios extras, 
+deﬁnidos a seguir:
+Premiações (parte 1)
+66
+
+
+--- PAGE 67 ---
+Caderno Vermelho - A Competição
+PRÊMIO ESCOLA PÚBLICA – Medalhas aos alunos da equipe com 
+melhor pontuação na competição dentre todas as equipes de escolas 
+públicas participantes, excetuando as escolas públicas campeãs da 
+competição (1ª, 2ª e 3ª) no nível. Esse prêmio não se aplica a Equipes de 
+Garagem.
+PRÊMIO ESCOLA PRIV ADA – Medalhas aos alunos da equipe com 
+melhor pontuação na competição dentre todas as equipes de escolas 
+privadas, particulares ou confessionais participantes, excetuando as 
+escolas privadas que tiveram equipes campeãs na competição (1ª, 2ª e 3ª) 
+no nível. Esse prêmio não se aplica a Equipes de Garagem.
+PRÊMIO ROBUSTEZ – Medalhas aos alunos da equipe que produziu o 
+robô mais robusto da competição, excetuando as equipes campeãs (1ª, 2ª 
+e 3ª) no nível.
+PRÊMIO INOV AÇÃO – Medalhas aos alunos da equipe que produziu algum 
+processo inovador no robô e que tenha ajudado a conquistar pontos na 
+competição, excetuando as equipes campeãs (1ª, 2ª e 3ª) no nível.
+PRÊMIO DESIGN – Medalhas aos alunos da equipe que produziu o robô 
+com melhor projeto mecânico e melhor acabado, excetuando as equipes 
+campeãs (1ª, 2ª e 3ª) no nível.
+PRÊMIO DEDICAÇÃO – Medalhas aos alunos da equipe que mais se 
+dedicou, ajudando a si própria, bem como outras equipes, a superarem 
+desaﬁos ao longo da competição regional, excetuando as equipes 
+campeãs (1ª, 2ª e 3ª) no nível.
+PRÊMIO PROGRAMAÇÃO – Medalhas aos alunos da equipe que 
+programou o robô com código melhor avaliado pelos juízes, apropriado e 
+documentado, excetuando as equipes campeãs (1ª, 2ª e 3ª) no nível.
+Premiações (parte 2)
+67
+
+--- PAGE 68 ---
+Caderno Vermelho - A Competição
+PRÊMIO MAKER – Medalhas aos alunos da equipe que criarem um robô 
+com o maior número possível de peças feitas pelos próprios alunos, e com 
+menor número possível de materiais prontos de kits, excetuando as 
+equipes campeãs (1ª, 2ª e 3ª) no nível. Exemplos são placas de circuito 
+confeccionadas ao invés de módulos prontos e/ou partes mecânicas 
+construídas manualmente ou feitas em impressora 3D ao invés de blocos 
+de montagem padrão prontos e disponíveis para compra.
+A OBR sempre busca estimular, junto a seus patrocinadores, a  
+distribuição da maior quantidade de prêmios para os alunos participantes. 
+Embora esforços sempre sejam realizados pela comissão organizadora, 
+não há garantias da distribuição de quaisquer outros prêmios em 
+nenhuma das categorias. 
+Premiações (parte 3)
+68
+
+
+--- PAGE 69 ---
+Caderno Vermelho - A Competição
+As soluções empregadas por sua equipe serão avaliadas durante a fase 
+estadual competição, quando esta fase possuir mais de 10 equipes do 
+mesmo nível presentes. T odas as equipes precisam se preparar para uma 
+apresentação e responder sobre estes aspectos durante as entrevistas. 
+Será utilizado um sistema de rubricas padronizado, com foco em 
+criatividade, inovação, simplicidade e funcionalidade. Seu 'trabalho' pode 
+incluir, mas não está limitado a,  um dos seguintes aspectos: criação de seu 
+próprio sensor em vez de um sensor pré-construído,  criação de um 
+'módulo sensor' que é composto de vários componentes eletrônicos, 
+resultando em um módulo independente para fornecer uma 
+funcionalidade especíﬁca, criação de uma invenção mecânica que seja 
+funcional e fora do comum, criação de um novo algoritmo de software 
+para um desaﬁo da competição, entre outros. As equipes, caso queiram, 
+podem utilizar apoios visuais, como portfólios, documentação de 
+passo-a-passo, diários, folders que auxiliem na explicação do seu 
+trabalho. Os documentos utilizados não devem ser entregues aos juízes, 
+pois a avaliação se dará somente no período da entrevista.
+Os juízes vão circular e irão interagir com as equipes. A avaliação técnica 
+destina-se a uma conversa casual com uma atmosfera de “perguntas e 
+respostas”.
+O principal objetivo da Avaliação T écnica é enaltecer o espírito de 
+inovação. Ser inovador pode signiﬁcar avanço técnico, em comparação 
+com o conhecimento existente, ou mesmo uma solução simples, mas 
+inteligente, para a tarefa, diferente daquelas soluções comuns.
+Avaliação técnica (Premiação Extra)
+69
+
+--- PAGE 70 ---
+Caderno Cinza - Mudanças
+Caderno Cinza
+Mudanças
+Mudanças desde o último manual lançado, ideal para 
+competidores com experiências anteriores.
+70
+
+--- PAGE 71 ---
+Caderno Cinza - Mudanças
+● A pontuação da rampa é contabilizada por cada ladrilho de rampa, 
+concedendo 10 pontos por cada ladrilho de rampa superado.
+● O tamanho das lombadas (redutores de velocidade) passa a ser 
+máximo de 30 cm X 30 cm,  com altura máxima de 1 cm.
+Este Ano
+71
+
+--- PAGE 72 ---
+Caderno Cinza - Mudanças
+1.0 - Março/2025
+Versionamento
+72
+
+--- PAGE 73 ---
+Caderno Laranja - Conﬂitos
+Caderno Laranja
+Conﬂitos
+Fair Play, Esclarecimento das Regras, Circunstâncias 
+Especiais e Recursos.
+73
+
+--- PAGE 74 ---
+Caderno Laranja - Conﬂitos
+Robôs que causarem danos deliberados ou repetidos na arena serão 
+desclassiﬁcados. 
+Humanos que causarem interferência deliberada durante os rounds, nas 
+arenas ou próximo delas, nos robôs ou danos na arena serão 
+desclassiﬁcados. 
+Espera-se que o objetivo de todas as equipes seja participar de forma 
+justa. 
+Introdução e Fair Play
+74
+
+
+--- PAGE 75 ---
+Caderno Laranja - Conﬂitos
+Durante a competição podem surgir conﬂitos e desentendimentos que 
+devem ser tratados sempre com respeito mútuo entre os participantes. É 
+importante saber que a decisão do Árbitros de Arena é ﬁnal, exceto se 
+houver deliberação contrária pela Comissão de Arbitragem Local. O 
+árbitro poderá, em casos de difícil decisão, consultar o Comissão de 
+Arbitragem para tomar sua decisão. É importante as equipes 
+conhecerem bem as regras da competição e atuarem sempre com 
+respeito aos árbitros, colegas, demais equipes e com todos que estão 
+assistindo. Divirta-se durante a competição e evite conﬂitos 
+desnecessários.
+T odas as decisões durante a partida são tomadas pelo árbitro chefe ou 
+pelo árbitro assistente que estão encarregados da arena, pessoas e 
+objetos ao seu redor.
+Durante a etapa, as decisões do árbitro chefe e/ou árbitros assistentes são 
+ﬁnais. 
+Na conclusão da rodada, o árbitro pedirá ao capitão para assinar a ata da 
+partida. Ao capitão deve ser dado o máximo de 1 minuto para rever a 
+pontuação e assiná-la. Ao assiná-la, o capitão aceita a pontuação ﬁnal, em 
+nome de toda a equipe. Em caso de mais esclarecimentos, o capitão da 
+equipe deve escrever os seus comentários na folha de pontuação e 
+assiná-la. 
+Árbitros
+75
+
+
+--- PAGE 76 ---
+Caderno Laranja - Conﬂitos
+Cada equipe é responsável por veriﬁcar a versão mais recente das regras 
+no site oﬁcial da OBR antes da competição.
+Se necessário, mesmo durante um torneio, esclarecimentos podem ser 
+feitos por membros do comitê técnico da OBR. 
+O esclarecimento das regras será feito pela Comissão de Arbitragem, ou, 
+previamente, pela organização geral, através da lista de questões 
+frequentes (FAQ). Dúvidas? Entre em contato através do e-mail 
+obr.pratica@robocup.org.br.
+Esclarecimento das Regras
+76
+
+
+--- PAGE 77 ---
+Caderno Laranja - Conﬂitos
+Modiﬁcações especiais nas regras para atender às circunstâncias 
+especiais, tais como problemas não previstos e problemas e/ou 
+capacidades dos times, podem ser acordadas até o início do torneio, 
+cabendo, neste caso, concordância da organização da competição.
+Circunstâncias Especiais
+77
+Caso aconteça reunião de capitães, e algum capitão de equipe não 
+compareça na reunião para discutir os problemas e a modiﬁcação das 
+regras, será considerado pela comissão organizadora, que ele está de 
+acordo.
+
+--- PAGE 78 ---
+Caderno Laranja - Conﬂitos
+A equipe ou competidor que se sentir prejudicado por alguma decisão dos 
+juízes ou da organização da OBR durante as etapas oﬁciais deve registrar 
+detalhadamente todas as informações do fato através do 'Formulário para 
+Impetrar Recurso'. O recurso deve ser referente a um ocorrido que 
+envolva diretamente a sua própria equipe. Dessa forma, as equipes 
+interessadas poderão formalizar seu pedido exclusivamente por meio do 
+formulário oﬁcial fornecido pela organização.
+Recursos
+78
+Os recursos, referente a um 
+ocorrido que envolva diretamente a 
+sua própria equipe, poderão ser 
+impetrados no prazo máximo de 1h 
+(uma hora) a contar do fato que os 
+motivou, permitindo assim cabal 
+apuração dos mesmos sem prejuízo 
+ao bom andamento do evento. 
+Decorrido o prazo estipulado ou 
+encerrado o evento (Etapa Regional 
+ou Estadual), todas as equipes serão 
+declaradas como de acordo com os 
+resultados, nada mais havendo a 
+reclamar.
+Nota-se ainda que a OBR espera que seus competidores participem do 
+evento com respeito e cooperação, lembrando sempre de nosso Código 
+de Conduta e buscando acordos através de discussões de forma 
+respeitosa e amistosa entre equipes e organização.
+T odos formulários os de recurso devem ser preenchidos por completo, e 
+devem conter um parecer da Comissão de Arbitragem e do 
+Representante Estadual da OBR. Após o término do evento, todos os  
+formulários serão entregues à coordenação geral da OBR. Dependendo da 
+gravidade do fato, o recurso poderá ser julgado imediatamente pelo 
+Juiz-chefe ou pelo Representante Estadual. Em alguns casos, o fato só 
+será julgado após o evento pela representação estadual da OBR e/ou 
+coordenação geral.
+
+--- PAGE 79 ---
+Este documento é de propriedade da Olimpíada Brasileira de Robótica e pode ser
+distribuído e reproduzido livremente, sem alteração de seu conteúdo original.
