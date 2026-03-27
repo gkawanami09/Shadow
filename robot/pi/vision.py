@@ -12,6 +12,7 @@ class VisionConfig:
     invert: bool = False
     gap_tempo: float = 0.35
     intersecao_largura: float = 0.55
+    intersecao_lado_min: float = 0.20
     giro_180_tempo: float = 1.2
     giro_180_offset: float = 1.0
     beco_cooldown: float = 2.0
@@ -21,6 +22,15 @@ class VisionConfig:
     verde_vmin: int = 60
     verde_area_min: int = 250
     verde_zona: float = 0.45
+    vermelho_hmin1: int = 0
+    vermelho_hmax1: int = 10
+    vermelho_hmin2: int = 170
+    vermelho_hmax2: int = 180
+    vermelho_smin: int = 70
+    vermelho_vmin: int = 50
+    vermelho_area_min: int = 250
+    vermelho_zona: float = 0.45
+    vermelho_tempo_parado: float = 20.0
     min_line_area: int = 300
     min_confidence: float = 0.08
 
@@ -34,6 +44,8 @@ class VisionState:
     turn_until: float = 0.0
     turn_reason: str = ""
     dead_end_cooldown_until: float = 0.0
+    red_stop_until: float = 0.0
+    red_armed: bool = True
 
 
 def _clamp(value, min_value, max_value):
@@ -127,6 +139,33 @@ def _detect_line(binary, min_line_area, frame_width):
     }
 
 
+def _detect_intersection(line_mask, config):
+    height, width = line_mask.shape[:2]
+    if height < 5:
+        return False
+
+    linhas_teste = 3
+    limite_total = int(width * config.intersecao_largura)
+    limite_lado = int((width / 2.0) * config.intersecao_lado_min)
+
+    for i in range(linhas_teste):
+        y = int((i + 1) * height / (linhas_teste + 1))
+        linha = line_mask[y : y + 1, :]
+        if linha.size == 0:
+            continue
+        pixels_total = int(np.count_nonzero(linha))
+        if pixels_total < limite_total:
+            continue
+        esquerda = linha[:, : width // 2]
+        direita = linha[:, width // 2 :]
+        pixels_esq = int(np.count_nonzero(esquerda))
+        pixels_dir = int(np.count_nonzero(direita))
+        if pixels_esq >= limite_lado and pixels_dir >= limite_lado:
+            return True
+
+    return False
+
+
 def _detect_green_markers(roi_bgr, config):
     hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
     lower = np.array([config.verde_hmin, config.verde_smin, config.verde_vmin], dtype=np.uint8)
@@ -181,6 +220,68 @@ def _summarize_green(green_data):
     return "AUSENTE", "sem verde"
 
 
+def _detect_red_markers(roi_bgr, config):
+    hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
+    lower1 = np.array(
+        [config.vermelho_hmin1, config.vermelho_smin, config.vermelho_vmin],
+        dtype=np.uint8,
+    )
+    upper1 = np.array([config.vermelho_hmax1, 255, 255], dtype=np.uint8)
+    lower2 = np.array(
+        [config.vermelho_hmin2, config.vermelho_smin, config.vermelho_vmin],
+        dtype=np.uint8,
+    )
+    upper2 = np.array([config.vermelho_hmax2, 255, 255], dtype=np.uint8)
+    mask1 = cv2.inRange(hsv, lower1, upper1)
+    mask2 = cv2.inRange(hsv, lower2, upper2)
+    mask = cv2.bitwise_or(mask1, mask2)
+
+    kernel = np.ones((5, 5), dtype=np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    zone_y = int(roi_bgr.shape[0] * (1.0 - config.vermelho_zona))
+    valid = []
+    outside = []
+    false = []
+
+    for contour in contours:
+        area = float(cv2.contourArea(contour))
+        x, y, w, h = cv2.boundingRect(contour)
+        center = (x + w // 2, y + h // 2)
+        marker = {
+            "area": area,
+            "bbox": (x, y, w, h),
+            "center": center,
+            "valid_zone": center[1] >= zone_y,
+        }
+        if area < config.vermelho_area_min:
+            false.append(marker)
+        elif center[1] >= zone_y:
+            valid.append(marker)
+        else:
+            outside.append(marker)
+
+    return {
+        "mask": mask,
+        "valid": valid,
+        "outside": outside,
+        "false": false,
+        "zone_y": zone_y,
+    }
+
+
+def _summarize_red(red_data):
+    if red_data["valid"]:
+        return "VALIDO", "vermelho detectado"
+    if red_data["outside"]:
+        return "FORA_ZONA", "vermelho fora da zona"
+    if red_data["false"]:
+        return "FALSO", "vermelho falso"
+    return "AUSENTE", "sem vermelho"
+
+
 def _classify_command(offset, intersection, green_state):
     if green_state == "BECO":
         return "U", "BECO_SEM_SAIDA"
@@ -210,6 +311,8 @@ def analyze_frame(frame_bgr, config, state):
     line = _detect_line(line_mask, config.min_line_area, frame_width)
     green = _detect_green_markers(roi_bgr, config)
     green_state, green_detail = _summarize_green(green)
+    red = _detect_red_markers(roi_bgr, config)
+    red_state, red_detail = _summarize_red(red)
 
     if line["found"]:
         state.last_seen_line_time = now
@@ -223,8 +326,8 @@ def analyze_frame(frame_bgr, config, state):
     gap_active = line_missing_for >= config.gap_tempo
     intersection = bool(
         line["found"]
-        and line["width_ratio"] >= config.intersecao_largura
         and line["confidence"] >= config.min_confidence
+        and _detect_intersection(line_mask, config)
     )
     line["intersection"] = intersection
 
@@ -232,7 +335,20 @@ def analyze_frame(frame_bgr, config, state):
     state_name = "SEM_LINHA"
     reason = "linha ausente"
 
-    if now < state.turn_until:
+    red_detected = bool(red["valid"])
+    if red_detected and state.red_armed:
+        state.red_stop_until = now + config.vermelho_tempo_parado
+        state.red_armed = False
+    if not red_detected and now >= state.red_stop_until:
+        state.red_armed = True
+
+    red_stop_active = now < state.red_stop_until
+
+    if red_stop_active:
+        command = "S"
+        state_name = "PARADO_VERMELHO"
+        reason = "vermelho detectado"
+    elif now < state.turn_until:
         command = "U"
         state_name = state.turn_reason or "GIRO_180"
         reason = "giro 180 em andamento"
@@ -254,7 +370,7 @@ def analyze_frame(frame_bgr, config, state):
         command = "S"
         state_name = "SEM_LINHA"
 
-    if line["found"] and state_name not in {"BECO_SEM_SAIDA", "GAP"}:
+    if line["found"] and state_name not in {"BECO_SEM_SAIDA", "GAP", "PARADO_VERMELHO"}:
         state.last_command = command
 
     debug = frame_bgr.copy()
@@ -266,6 +382,13 @@ def analyze_frame(frame_bgr, config, state):
         (0, y0 + green["zone_y"]),
         (frame_width - 1, y0 + green["zone_y"]),
         (0, 255, 255),
+        2,
+    )
+    cv2.line(
+        debug,
+        (0, y0 + red["zone_y"]),
+        (frame_width - 1, y0 + red["zone_y"]),
+        (0, 0, 255),
         2,
     )
 
@@ -300,6 +423,28 @@ def analyze_frame(frame_bgr, config, state):
         x, y, w, h = marker["bbox"]
         cv2.rectangle(debug, (x, y0 + y), (x + w, y0 + y + h), (128, 128, 128), 1)
 
+    for marker in red["valid"]:
+        x, y, w, h = marker["bbox"]
+        cv2.rectangle(debug, (x, y0 + y), (x + w, y0 + y + h), (0, 0, 255), 2)
+        cv2.putText(
+            debug,
+            "VERMELHO",
+            (x, max(20, y0 + y - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+    for marker in red["outside"]:
+        x, y, w, h = marker["bbox"]
+        cv2.rectangle(debug, (x, y0 + y), (x + w, y0 + y + h), (0, 0, 160), 1)
+
+    for marker in red["false"]:
+        x, y, w, h = marker["bbox"]
+        cv2.rectangle(debug, (x, y0 + y), (x + w, y0 + y + h), (96, 96, 96), 1)
+
     overlay_lines = [
         f"Estado: {state_name}",
         f"Cmd logico: {command}",
@@ -307,6 +452,7 @@ def analyze_frame(frame_bgr, config, state):
         f"Confidence: {line['confidence']:.2f}",
         f"Intersecao: {'SIM' if intersection else 'NAO'}",
         f"Verde: {green_detail}",
+        f"Vermelho: {red_detail}",
         f"Threshold: {threshold_used}",
         reason,
     ]
@@ -332,6 +478,9 @@ def analyze_frame(frame_bgr, config, state):
         "suggested_command": command,
         "green_state": green_state,
         "green_detail": green_detail,
+        "red_state": red_state,
+        "red_detail": red_detail,
+        "red_stop_active": red_stop_active,
         "gap_active": gap_active,
         "debug_frame": debug,
         "line_found": line["found"],
