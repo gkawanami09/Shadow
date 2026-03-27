@@ -1,0 +1,330 @@
+import argparse
+import os
+import sys
+import time
+
+try:
+    import cv2
+except ModuleNotFoundError as exc:
+    if exc.name == "cv2":
+        print(
+            "Dependencia ausente: OpenCV (cv2).\n"
+            "Instale com um destes comandos e tente novamente:\n"
+            "  sudo apt update && sudo apt install -y python3-opencv python3-numpy\n"
+            "ou\n"
+            "  python3 -m pip install -r requirements.txt",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    raise
+
+from camera import fechar_camera, iniciar_camera, ler_frame
+from serial_comm import (
+    abrir_serial,
+    fechar_serial,
+    giro_180,
+    parar,
+    reto,
+    virar_direita,
+    virar_esquerda,
+)
+from stream import StreamServer
+from vision import VisionConfig, VisionState, analyze_frame
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Modo controle: visao + envio de comandos seriais."
+    )
+    parser.add_argument("--device", type=int, default=None, help="Forca um indice de camera.")
+    parser.add_argument("--width", type=int, default=640, help="Largura da captura.")
+    parser.add_argument("--height", type=int, default=480, help="Altura da captura.")
+    parser.add_argument("--fps", type=int, default=30, help="FPS desejado.")
+    parser.add_argument("--roi", type=float, default=0.40, help="Fracao inferior usada como ROI.")
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=None,
+        help="Threshold fixo. Se omitido, usa Otsu.",
+    )
+    parser.add_argument("--invert", action="store_true", help="Inverte a polaridade da linha.")
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Mostra a janela de debug.",
+    )
+    parser.add_argument(
+        "--no-show",
+        action="store_true",
+        help="Nao mostra a janela mesmo se houver display.",
+    )
+    parser.add_argument(
+        "--debug-path",
+        default=None,
+        help="Salva continuamente o ultimo frame de debug nesse caminho.",
+    )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Publica o frame de debug via navegador (MJPEG).",
+    )
+    parser.add_argument(
+        "--stream-host",
+        default="0.0.0.0",
+        help="Host do servidor de stream.",
+    )
+    parser.add_argument(
+        "--stream-port",
+        type=int,
+        default=8080,
+        help="Porta do servidor de stream.",
+    )
+    parser.add_argument(
+        "--print-every",
+        type=float,
+        default=0.20,
+        help="Intervalo minimo entre logs no terminal.",
+    )
+    parser.add_argument("--gap-tempo", type=float, default=0.35)
+    parser.add_argument("--intersecao-largura", type=float, default=0.55)
+    parser.add_argument(
+        "--intersecao-lado-min",
+        type=float,
+        default=0.20,
+        help="Minimo de linha em ambos os lados para confirmar intersecao completa.",
+    )
+    parser.add_argument("--giro-180-tempo", type=float, default=1.2)
+    parser.add_argument("--giro-180-offset", type=float, default=1.0)
+    parser.add_argument("--beco-cooldown", type=float, default=2.0)
+    parser.add_argument("--verde-hmin", type=int, default=35)
+    parser.add_argument("--verde-hmax", type=int, default=95)
+    parser.add_argument("--verde-smin", type=int, default=60)
+    parser.add_argument("--verde-vmin", type=int, default=60)
+    parser.add_argument("--verde-area-min", type=int, default=250)
+    parser.add_argument("--verde-zona", type=float, default=0.45)
+    parser.add_argument("--vermelho-hmin1", type=int, default=0)
+    parser.add_argument("--vermelho-hmax1", type=int, default=10)
+    parser.add_argument("--vermelho-hmin2", type=int, default=170)
+    parser.add_argument("--vermelho-hmax2", type=int, default=180)
+    parser.add_argument("--vermelho-smin", type=int, default=70)
+    parser.add_argument("--vermelho-vmin", type=int, default=50)
+    parser.add_argument("--vermelho-area-min", type=int, default=250)
+    parser.add_argument("--vermelho-zona", type=float, default=0.45)
+    parser.add_argument(
+        "--vermelho-tempo-parado",
+        type=float,
+        default=20.0,
+        help="Tempo de parada (segundos) ao detectar vermelho.",
+    )
+    parser.add_argument("--port", type=str, default=None, help="Porta serial (ex: /dev/ttyACM0).")
+    parser.add_argument("--baud", type=int, default=115200)
+    parser.add_argument(
+        "--velocidade-reto",
+        type=int,
+        default=180,
+        help="Velocidade para seguir reto (0-255).",
+    )
+    parser.add_argument(
+        "--velocidade-giro",
+        type=int,
+        default=180,
+        help="Velocidade para virar (0-255).",
+    )
+    parser.add_argument(
+        "--velocidade-u",
+        type=int,
+        default=180,
+        help="Velocidade para giro 180 (0-255).",
+    )
+    parser.add_argument(
+        "--comando-intervalo",
+        type=float,
+        default=0.1,
+        help="Intervalo minimo para reenviar comando (segundos).",
+    )
+    return parser.parse_args()
+
+
+def build_config(args):
+    return VisionConfig(
+        roi=args.roi,
+        threshold=args.threshold,
+        invert=args.invert,
+        gap_tempo=args.gap_tempo,
+        intersecao_largura=args.intersecao_largura,
+        intersecao_lado_min=args.intersecao_lado_min,
+        giro_180_tempo=args.giro_180_tempo,
+        giro_180_offset=args.giro_180_offset,
+        beco_cooldown=args.beco_cooldown,
+        verde_hmin=args.verde_hmin,
+        verde_hmax=args.verde_hmax,
+        verde_smin=args.verde_smin,
+        verde_vmin=args.verde_vmin,
+        verde_area_min=args.verde_area_min,
+        verde_zona=args.verde_zona,
+        vermelho_hmin1=args.vermelho_hmin1,
+        vermelho_hmax1=args.vermelho_hmax1,
+        vermelho_hmin2=args.vermelho_hmin2,
+        vermelho_hmax2=args.vermelho_hmax2,
+        vermelho_smin=args.vermelho_smin,
+        vermelho_vmin=args.vermelho_vmin,
+        vermelho_area_min=args.vermelho_area_min,
+        vermelho_zona=args.vermelho_zona,
+        vermelho_tempo_parado=args.vermelho_tempo_parado,
+    )
+
+
+def _clamp_speed(value):
+    return max(0, min(255, int(value)))
+
+
+def _send_command(ser, command, speeds):
+    if ser is None:
+        return
+    if command == "S":
+        parar(ser)
+    elif command == "F":
+        reto(ser, speeds["reto"])
+    elif command == "L":
+        virar_esquerda(ser, speeds["giro"])
+    elif command == "R":
+        virar_direita(ser, speeds["giro"])
+    elif command == "U":
+        giro_180(ser, speeds["u"])
+    else:
+        parar(ser)
+
+
+def print_status(result):
+    print(
+        " | ".join(
+            [
+                f"estado={result['state']}",
+                f"offset={result['offset']:+.3f}",
+                f"confidence={result['confidence']:.2f}",
+                f"intersecao={'SIM' if result['intersection'] else 'NAO'}",
+                f"comando={result['suggested_command']}",
+                f"verde={result['green_state']}",
+                f"vermelho={result['red_state']}",
+            ]
+        ),
+        flush=True,
+    )
+
+
+def main():
+    args = parse_args()
+    config = build_config(args)
+    state = VisionState()
+    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    should_show = args.show or (has_display and not args.no_show)
+    stream_server = None
+    ser = None
+
+    speeds = {
+        "reto": _clamp_speed(args.velocidade_reto),
+        "giro": _clamp_speed(args.velocidade_giro),
+        "u": _clamp_speed(args.velocidade_u),
+    }
+
+    try:
+        camera = iniciar_camera(
+            device=args.device,
+            width=args.width,
+            height=args.height,
+            framerate=args.fps,
+            prefer_picamera2=False,
+            fallback_picamera2=True,
+        )
+    except RuntimeError as exc:
+        print(f"Erro ao abrir camera: {exc}", file=sys.stderr)
+        return 1
+
+    if args.port:
+        ser = abrir_serial(port=args.port, baud=args.baud)
+        if ser is None:
+            print(
+                "Aviso: porta serial nao abriu. Rodando sem envio de comandos.",
+                file=sys.stderr,
+            )
+
+    print(
+        f"Camera pronta via {camera['backend']} ({camera['device']}) "
+        f"em {args.width}x{args.height}@{args.fps}."
+    )
+    if ser is None:
+        print("Modo controle sem serial: apenas visao/log.")
+    else:
+        print(f"Serial ativa em {args.port} @ {args.baud}.")
+    if should_show:
+        cv2.namedWindow("vision_debug", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("vision_debug", max(640, args.width), max(480, args.height))
+        print("Janela de debug ativa em 'vision_debug'.")
+    else:
+        print(
+            "Janela de debug desativada. Use --show em um desktop local "
+            "ou acompanhe por --debug-path."
+        )
+    if args.stream:
+        stream_server = StreamServer(host=args.stream_host, port=args.stream_port)
+        stream_server.start()
+        print(
+            f"Stream web ativo em http://127.0.0.1:{args.stream_port} "
+            f"(na Raspberry) e http://IP_DA_RASPBERRY:{args.stream_port} (no notebook)."
+        )
+
+    last_print = 0.0
+    last_sent_cmd = None
+    last_sent_time = 0.0
+
+    try:
+        while True:
+            frame = ler_frame(camera)
+            if frame is None:
+                print("Falha ao ler frame da camera.", file=sys.stderr)
+                break
+
+            result = analyze_frame(frame, config, state)
+            now = time.monotonic()
+
+            if args.print_every <= 0 or (now - last_print) >= args.print_every:
+                print_status(result)
+                last_print = now
+
+            if args.debug_path:
+                cv2.imwrite(args.debug_path, result["debug_frame"])
+            if stream_server is not None:
+                stream_server.update_frame(result["debug_frame"])
+
+            if should_show:
+                cv2.imshow("vision_debug", result["debug_frame"])
+                key = cv2.waitKey(1) & 0xFF
+                if key in (27, ord("q")):
+                    break
+
+            command = result["suggested_command"]
+            should_send = (
+                command != last_sent_cmd
+                or (now - last_sent_time) >= args.comando_intervalo
+            )
+            if should_send:
+                _send_command(ser, command, speeds)
+                last_sent_cmd = command
+                last_sent_time = now
+    finally:
+        if ser is not None:
+            try:
+                parar(ser)
+            finally:
+                fechar_serial(ser)
+        fechar_camera(camera)
+        if stream_server is not None:
+            stream_server.stop()
+        if should_show:
+            cv2.destroyAllWindows()
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
