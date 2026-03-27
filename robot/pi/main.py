@@ -78,6 +78,12 @@ def parse_args():
     )
     parser.add_argument("--gap-tempo", type=float, default=0.35)
     parser.add_argument("--intersecao-largura", type=float, default=0.55)
+    parser.add_argument(
+        "--intersecao-lado-min",
+        type=float,
+        default=0.20,
+        help="Minimo de linha em ambos os lados para confirmar intersecao completa.",
+    )
     parser.add_argument("--giro-180-tempo", type=float, default=1.2)
     parser.add_argument("--giro-180-offset", type=float, default=1.0)
     parser.add_argument("--beco-cooldown", type=float, default=2.0)
@@ -87,6 +93,20 @@ def parse_args():
     parser.add_argument("--verde-vmin", type=int, default=60)
     parser.add_argument("--verde-area-min", type=int, default=250)
     parser.add_argument("--verde-zona", type=float, default=0.45)
+    parser.add_argument("--vermelho-hmin1", type=int, default=0)
+    parser.add_argument("--vermelho-hmax1", type=int, default=10)
+    parser.add_argument("--vermelho-hmin2", type=int, default=170)
+    parser.add_argument("--vermelho-hmax2", type=int, default=180)
+    parser.add_argument("--vermelho-smin", type=int, default=70)
+    parser.add_argument("--vermelho-vmin", type=int, default=50)
+    parser.add_argument("--vermelho-area-min", type=int, default=250)
+    parser.add_argument("--vermelho-zona", type=float, default=0.45)
+    parser.add_argument(
+        "--vermelho-tempo-parado",
+        type=float,
+        default=20.0,
+        help="Tempo de parada (segundos) ao detectar vermelho.",
+    )
     return parser.parse_args()
 
 
@@ -97,6 +117,7 @@ def build_config(args):
         invert=args.invert,
         gap_tempo=args.gap_tempo,
         intersecao_largura=args.intersecao_largura,
+        intersecao_lado_min=args.intersecao_lado_min,
         giro_180_tempo=args.giro_180_tempo,
         giro_180_offset=args.giro_180_offset,
         beco_cooldown=args.beco_cooldown,
@@ -106,6 +127,15 @@ def build_config(args):
         verde_vmin=args.verde_vmin,
         verde_area_min=args.verde_area_min,
         verde_zona=args.verde_zona,
+        vermelho_hmin1=args.vermelho_hmin1,
+        vermelho_hmax1=args.vermelho_hmax1,
+        vermelho_hmin2=args.vermelho_hmin2,
+        vermelho_hmax2=args.vermelho_hmax2,
+        vermelho_smin=args.vermelho_smin,
+        vermelho_vmin=args.vermelho_vmin,
+        vermelho_area_min=args.vermelho_area_min,
+        vermelho_zona=args.vermelho_zona,
+        vermelho_tempo_parado=args.vermelho_tempo_parado,
     )
 
 
@@ -120,6 +150,8 @@ def print_status(result):
                 f"decisao_visual={result['suggested_command']}",
                 f"verde={result['green_state']}",
                 f"verde_info={result['green_detail']}",
+                f"vermelho={result['red_state']}",
+                f"vermelho_info={result['red_detail']}",
             ]
         ),
         flush=True,
