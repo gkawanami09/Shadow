@@ -5,63 +5,54 @@ from socketserver import ThreadingMixIn
 import cv2
 
 
-HTML_PAGE = b"""\
+PAGINA_HTML = b"""\
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang=\"pt-BR\">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Shadow Vision Stream</title>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Shadow Stream</title>
   <style>
-    :root {
-      color-scheme: dark;
-      --bg: #101820;
-      --panel: #17232d;
-      --accent: #6ee7b7;
-      --text: #eef6f8;
-    }
     body {
       margin: 0;
-      font-family: sans-serif;
-      background: linear-gradient(135deg, #0d1419, #13232f);
-      color: var(--text);
+      font-family: Arial, sans-serif;
+      background: #0f1418;
+      color: #f4f7f8;
       min-height: 100vh;
       display: grid;
       place-items: center;
     }
     main {
-      width: min(96vw, 1100px);
-      padding: 20px;
-      background: rgba(23, 35, 45, 0.92);
-      border: 1px solid rgba(110, 231, 183, 0.2);
-      border-radius: 18px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      width: min(96vw, 1120px);
+      padding: 18px;
+      border-radius: 14px;
+      background: #18242d;
+      border: 1px solid #304654;
     }
     h1 {
       margin: 0 0 8px;
-      font-size: 1.4rem;
+      font-size: 1.3rem;
     }
     p {
-      margin: 0 0 16px;
-      opacity: 0.82;
+      margin: 0 0 14px;
+      opacity: 0.86;
     }
     img {
       width: 100%;
-      display: block;
-      border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
       background: #000;
+      border: 1px solid #2b3f4c;
     }
     code {
-      color: var(--accent);
+      color: #74e0b3;
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Shadow Vision Stream</h1>
-    <p>Abra esta pagina no notebook para acompanhar a webcam e o debug em tempo real.</p>
-    <img src="/stream.mjpg" alt="Stream da camera">
+    <h1>Shadow - Stream de Debug</h1>
+    <p>Abra esta pagina no notebook para acompanhar a visao em tempo real.</p>
+    <img src=\"/stream.mjpg\" alt=\"Stream da camera\">
     <p>Endpoint direto: <code>/stream.mjpg</code></p>
   </main>
 </body>
@@ -69,47 +60,48 @@ HTML_PAGE = b"""\
 """
 
 
-class _ThreadedHTTPServer(ThreadingMixIn, server.HTTPServer):
+class _ServidorHTTPComThreads(ThreadingMixIn, server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
 
-class StreamServer:
-    def __init__(self, host="0.0.0.0", port=8080, jpeg_quality=80):
+class ServidorStream:
+    def __init__(self, host="0.0.0.0", port=8080, qualidade_jpeg=80):
         self.host = host
-        self.port = port
-        self.jpeg_quality = jpeg_quality
-        self._frame_lock = threading.Lock()
-        self._frame_bytes = None
-        self._server = None
+        self.port = int(port)
+        self.qualidade_jpeg = int(qualidade_jpeg)
+        self._trava_quadro = threading.Lock()
+        self._quadro_jpeg = None
+        self._servidor = None
         self._thread = None
 
-    def update_frame(self, frame_bgr):
-        ok, encoded = cv2.imencode(
+    def atualizar_quadro(self, quadro_bgr):
+        sucesso, codificado = cv2.imencode(
             ".jpg",
-            frame_bgr,
-            [int(cv2.IMWRITE_JPEG_QUALITY), int(self.jpeg_quality)],
+            quadro_bgr,
+            [int(cv2.IMWRITE_JPEG_QUALITY), int(self.qualidade_jpeg)],
         )
-        if not ok:
+        if not sucesso:
             return
-        with self._frame_lock:
-            self._frame_bytes = encoded.tobytes()
 
-    def get_frame(self):
-        with self._frame_lock:
-            return self._frame_bytes
+        with self._trava_quadro:
+            self._quadro_jpeg = codificado.tobytes()
 
-    def start(self):
-        owner = self
+    def _obter_quadro(self):
+        with self._trava_quadro:
+            return self._quadro_jpeg
 
-        class Handler(server.BaseHTTPRequestHandler):
+    def iniciar(self):
+        dono = self
+
+        class Manipulador(server.BaseHTTPRequestHandler):
             def do_GET(self):
                 if self.path in ("/", "/index.html"):
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
                     self.end_headers()
-                    self.wfile.write(HTML_PAGE)
+                    self.wfile.write(PAGINA_HTML)
                     return
 
                 if self.path == "/stream.mjpg":
@@ -121,31 +113,31 @@ class StreamServer:
                     self.end_headers()
                     try:
                         while True:
-                            frame = owner.get_frame()
-                            if frame is None:
+                            quadro = dono._obter_quadro()
+                            if quadro is None:
                                 continue
-                            self.wfile.write(b"--frame\r\n")
+                            self.wfile.write(b"--frame\\r\\n")
                             self.send_header("Content-Type", "image/jpeg")
-                            self.send_header("Content-Length", str(len(frame)))
+                            self.send_header("Content-Length", str(len(quadro)))
                             self.end_headers()
-                            self.wfile.write(frame)
-                            self.wfile.write(b"\r\n")
+                            self.wfile.write(quadro)
+                            self.wfile.write(b"\\r\\n")
                     except (BrokenPipeError, ConnectionResetError):
                         return
                     return
 
                 self.send_error(404)
 
-            def log_message(self, format, *args):
+            def log_message(self, formato, *argumentos):
                 return
 
-        self._server = _ThreadedHTTPServer((self.host, self.port), Handler)
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._servidor = _ServidorHTTPComThreads((self.host, self.port), Manipulador)
+        self._thread = threading.Thread(target=self._servidor.serve_forever, daemon=True)
         self._thread.start()
 
-    def stop(self):
-        if self._server is not None:
-            self._server.shutdown()
-            self._server.server_close()
-            self._server = None
+    def parar(self):
+        if self._servidor is not None:
+            self._servidor.shutdown()
+            self._servidor.server_close()
+            self._servidor = None
         self._thread = None
