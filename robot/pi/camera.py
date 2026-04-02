@@ -3,46 +3,48 @@ import time
 import cv2
 
 
-DEFAULT_DEVICE_CANDIDATES = (0, 1, 2)
+CANDIDATOS_DISPOSITIVO_PADRAO = (0, 1, 2)
 
 
-def _abrir_opencv_device(device, width, height, framerate):
-    cap = cv2.VideoCapture(device)
-    if not cap.isOpened():
-        cap.release()
+def _abrir_dispositivo_opencv(indice_dispositivo, largura, altura, taxa_quadros):
+    captura = cv2.VideoCapture(indice_dispositivo)
+    if not captura.isOpened():
+        captura.release()
         return None, "nao abriu"
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap.set(cv2.CAP_PROP_FPS, framerate)
+    captura.set(cv2.CAP_PROP_FRAME_WIDTH, int(largura))
+    captura.set(cv2.CAP_PROP_FRAME_HEIGHT, int(altura))
+    captura.set(cv2.CAP_PROP_FPS, int(taxa_quadros))
 
-    ok, frame = cap.read()
-    if not ok or frame is None or frame.size == 0:
-        cap.release()
-        return None, "abriu mas nao entregou frame valido"
+    ok, quadro = captura.read()
+    if not ok or quadro is None or quadro.size == 0:
+        captura.release()
+        return None, "abriu mas nao retornou quadro valido"
 
-    return cap, None
+    return captura, None
 
 
-def _abrir_picamera2(width, height):
+def _abrir_picamera2(largura, altura):
     try:
         from picamera2 import Picamera2
 
-        picam = Picamera2()
-        config = picam.create_preview_configuration(
-            main={"size": (width, height), "format": "RGB888"}
+        camera_pi = Picamera2()
+        configuracao = camera_pi.create_preview_configuration(
+            main={"size": (int(largura), int(altura)), "format": "RGB888"}
         )
-        picam.configure(config)
-        picam.start()
-        time.sleep(0.2)
-        frame = picam.capture_array()
-        if frame is None or frame.size == 0:
-            picam.stop()
-            picam.close()
-            return None, "Picamera2 abriu mas nao entregou frame valido"
-        return picam, None
-    except Exception as exc:
-        return None, str(exc)
+        camera_pi.configure(configuracao)
+        camera_pi.start()
+        time.sleep(0.20)
+
+        quadro = camera_pi.capture_array()
+        if quadro is None or quadro.size == 0:
+            camera_pi.stop()
+            camera_pi.close()
+            return None, "picamera2 abriu mas nao retornou quadro valido"
+
+        return camera_pi, None
+    except Exception as excecao:
+        return None, str(excecao)
 
 
 def iniciar_camera(
@@ -52,81 +54,82 @@ def iniciar_camera(
     framerate=30,
     prefer_picamera2=False,
     fallback_picamera2=True,
-    device_candidates=DEFAULT_DEVICE_CANDIDATES,
+    device_candidates=CANDIDATOS_DISPOSITIVO_PADRAO,
 ):
-    state = {
-        "width": width,
-        "height": height,
+    estado_camera = {
+        "largura": int(width),
+        "altura": int(height),
+        "captura": None,
         "picamera2": None,
-        "cap": None,
         "backend": None,
         "device": None,
     }
 
     tentativas = []
-    devices = [device] if device is not None else list(device_candidates)
+    candidatos = [int(device)] if device is not None else list(device_candidates)
 
     if not prefer_picamera2:
-        for candidate in devices:
-            cap, erro = _abrir_opencv_device(candidate, width, height, framerate)
-            if cap is not None:
-                state["cap"] = cap
-                state["backend"] = "opencv"
-                state["device"] = candidate
-                return state
-            tentativas.append(f"OpenCV device {candidate}: {erro}")
+        for candidato in candidatos:
+            captura, erro = _abrir_dispositivo_opencv(candidato, width, height, framerate)
+            if captura is not None:
+                estado_camera["captura"] = captura
+                estado_camera["backend"] = "opencv"
+                estado_camera["device"] = candidato
+                return estado_camera
+            tentativas.append(f"opencv({candidato}): {erro}")
 
     if prefer_picamera2 or fallback_picamera2:
-        picam, erro = _abrir_picamera2(width, height)
-        if picam is not None:
-            state["picamera2"] = picam
-            state["backend"] = "picamera2"
-            state["device"] = "picamera2"
-            return state
-        tentativas.append(f"Picamera2: {erro}")
+        camera_pi, erro = _abrir_picamera2(width, height)
+        if camera_pi is not None:
+            estado_camera["picamera2"] = camera_pi
+            estado_camera["backend"] = "picamera2"
+            estado_camera["device"] = "picamera2"
+            return estado_camera
+        tentativas.append(f"picamera2: {erro}")
 
     if prefer_picamera2:
-        for candidate in devices:
-            cap, erro = _abrir_opencv_device(candidate, width, height, framerate)
-            if cap is not None:
-                state["cap"] = cap
-                state["backend"] = "opencv"
-                state["device"] = candidate
-                return state
-            tentativas.append(f"OpenCV device {candidate}: {erro}")
+        for candidato in candidatos:
+            captura, erro = _abrir_dispositivo_opencv(candidato, width, height, framerate)
+            if captura is not None:
+                estado_camera["captura"] = captura
+                estado_camera["backend"] = "opencv"
+                estado_camera["device"] = candidato
+                return estado_camera
+            tentativas.append(f"opencv({candidato}): {erro}")
 
-    detalhe = "; ".join(tentativas) if tentativas else "nenhuma tentativa executada"
+    detalhes = "; ".join(tentativas) if tentativas else "nenhuma tentativa executada"
     raise RuntimeError(
-        "Nao foi possivel abrir uma camera valida. "
-        f"Tentativas: {detalhe}"
+        "Nao foi possivel abrir a camera. "
+        f"Tentativas: {detalhes}"
     )
 
 
-def ler_frame(state):
-    picam = state.get("picamera2")
-    if picam is not None:
-        frame = picam.capture_array()
-        if frame is None:
+def ler_frame(estado_camera):
+    camera_pi = estado_camera.get("picamera2")
+    if camera_pi is not None:
+        quadro_rgb = camera_pi.capture_array()
+        if quadro_rgb is None or quadro_rgb.size == 0:
             return None
-        return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        return cv2.cvtColor(quadro_rgb, cv2.COLOR_RGB2BGR)
 
-    cap = state.get("cap")
-    if cap is None:
+    captura = estado_camera.get("captura")
+    if captura is None:
         return None
-    ok, frame = cap.read()
-    if not ok:
+
+    ok, quadro = captura.read()
+    if not ok or quadro is None or quadro.size == 0:
         return None
-    return frame
+    return quadro
 
 
-def fechar_camera(state):
-    picam = state.get("picamera2")
-    if picam is not None:
-        picam.stop()
-        picam.close()
-        state["picamera2"] = None
+def fechar_camera(estado_camera):
+    camera_pi = estado_camera.get("picamera2")
+    if camera_pi is not None:
+        camera_pi.stop()
+        camera_pi.close()
+        estado_camera["picamera2"] = None
 
-    cap = state.get("cap")
-    if cap is not None:
-        cap.release()
-        state["cap"] = None
+    captura = estado_camera.get("captura")
+    if captura is not None:
+        captura.release()
+        estado_camera["captura"] = None
