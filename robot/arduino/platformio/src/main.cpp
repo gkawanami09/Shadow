@@ -1,156 +1,282 @@
 #include <Arduino.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Ajuste os pinos conforme sua ligacao fisica.
-// Driver TB6612 da frente (lado esquerdo = A, lado direito = B)
-const int AIN1_F = 2;
-const int AIN2_F = 3;
-const int PWMA_F = 5;   // PWM
-const int BIN1_F = 4;
-const int BIN2_F = 7;
-const int PWMB_F = 6;   // PWM
+struct PinosMotor {
+  uint8_t pino_in1;
+  uint8_t pino_in2;
+  uint8_t pino_pwm;
+};
 
-// Driver TB6612 de tras (lado esquerdo = A, lado direito = B)
-const int AIN1_R = 8;
-const int AIN2_R = 12;
-const int PWMA_R = 9;   // PWM
-const int BIN1_R = 13;
-const int BIN2_R = 11;
-const int PWMB_R = 10;  // PWM
+// Mapeamento real informado pelo usuario.
+const PinosMotor MOTOR_TRASEIRO_ESQUERDO = {2, 4, 3};
+const PinosMotor MOTOR_TRASEIRO_DIREITO = {13, 12, 11};
+const PinosMotor MOTOR_FRENTE_ESQUERDO = {10, 9, 5};
+const PinosMotor MOTOR_FRENTE_DIREITO = {8, 7, 6};
 
-// Standby (pode ligar os dois STBY juntos neste pino)
-const int STBY = A0;
+const int VELOCIDADE_PADRAO = 150;
+const int VELOCIDADE_GIRO_180_PADRAO = 130;
+const unsigned long DURACAO_GIRO_180_MS = 1100;
 
-const int DEFAULT_SPEED = 180;
-const unsigned long TURN_180_MS = 1200;
+const size_t TAMANHO_BUFFER_SERIAL = 64;
+char buffer_serial[TAMANHO_BUFFER_SERIAL];
+size_t indice_buffer_serial = 0;
 
-String buffer = "";
-bool turn_active = false;
-unsigned long turn_until = 0;
-int turn_speed = DEFAULT_SPEED;
+bool giro_180_ativo = false;
+unsigned long giro_180_ate_ms = 0;
 
-void setMotor(int in1, int in2, int pwm, int speed) {
-  speed = constrain(speed, -255, 255);
-  if (speed > 0) {
-    digitalWrite(in1, HIGH);
-    digitalWrite(in2, LOW);
-    analogWrite(pwm, speed);
-  } else if (speed < 0) {
-    digitalWrite(in1, LOW);
-    digitalWrite(in2, HIGH);
-    analogWrite(pwm, -speed);
-  } else {
-    digitalWrite(in1, LOW);
-    digitalWrite(in2, LOW);
-    analogWrite(pwm, 0);
+int limitar_pwm_positivo(int valor) {
+  return constrain(valor, 0, 255);
+}
+
+char* avancar_espacos(char* texto) {
+  while (*texto == ' ' || *texto == '\t') {
+    ++texto;
+  }
+  return texto;
+}
+
+void remover_espacos_finais(char* texto) {
+  int tamanho = strlen(texto);
+  while (tamanho > 0) {
+    char atual = texto[tamanho - 1];
+    if (atual != ' ' && atual != '\t') {
+      break;
+    }
+    texto[tamanho - 1] = '\0';
+    --tamanho;
   }
 }
 
-void setLeft(int speed) {
-  setMotor(AIN1_F, AIN2_F, PWMA_F, speed);
-  setMotor(AIN1_R, AIN2_R, PWMA_R, speed);
-}
+void definir_motor(const PinosMotor& motor, int velocidade_assinada) {
+  velocidade_assinada = constrain(velocidade_assinada, -255, 255);
 
-void setRight(int speed) {
-  setMotor(BIN1_F, BIN2_F, PWMB_F, speed);
-  setMotor(BIN1_R, BIN2_R, PWMB_R, speed);
-}
-
-void stopAll() {
-  setLeft(0);
-  setRight(0);
-}
-
-void startTurn180(int speed) {
-  turn_active = true;
-  turn_speed = constrain(speed, 0, 255);
-  turn_until = millis() + TURN_180_MS;
-  // Giro no lugar (direita)
-  setLeft(turn_speed);
-  setRight(-turn_speed);
-}
-
-void applyCommand(char cmd, int speed) {
-  speed = constrain(speed, 0, 255);
-  turn_active = false;
-
-  switch (cmd) {
-    case 'F':
-      setLeft(speed);
-      setRight(speed);
-      break;
-    case 'B':
-      setLeft(-speed);
-      setRight(-speed);
-      break;
-    case 'L':
-      setLeft(-speed);
-      setRight(speed);
-      break;
-    case 'R':
-      setLeft(speed);
-      setRight(-speed);
-      break;
-    case 'S':
-      stopAll();
-      break;
-    case 'U':
-      startTurn180(speed);
-      break;
-    default:
-      stopAll();
-      break;
-  }
-}
-
-void handleLine(String line) {
-  line.trim();
-  if (line.length() == 0) {
+  if (velocidade_assinada > 0) {
+    digitalWrite(motor.pino_in1, HIGH);
+    digitalWrite(motor.pino_in2, LOW);
+    analogWrite(motor.pino_pwm, velocidade_assinada);
     return;
   }
-  char cmd = toupper(line.charAt(0));
-  int speed = DEFAULT_SPEED;
-  int comma = line.indexOf(',');
-  if (comma >= 0 && comma + 1 < line.length()) {
-    speed = line.substring(comma + 1).toInt();
+
+  if (velocidade_assinada < 0) {
+    digitalWrite(motor.pino_in1, LOW);
+    digitalWrite(motor.pino_in2, HIGH);
+    analogWrite(motor.pino_pwm, -velocidade_assinada);
+    return;
   }
-  applyCommand(cmd, speed);
+
+  digitalWrite(motor.pino_in1, LOW);
+  digitalWrite(motor.pino_in2, LOW);
+  analogWrite(motor.pino_pwm, 0);
+}
+
+void definir_lado_esquerdo(int velocidade_assinada) {
+  definir_motor(MOTOR_FRENTE_ESQUERDO, velocidade_assinada);
+  definir_motor(MOTOR_TRASEIRO_ESQUERDO, velocidade_assinada);
+}
+
+void definir_lado_direito(int velocidade_assinada) {
+  definir_motor(MOTOR_FRENTE_DIREITO, velocidade_assinada);
+  definir_motor(MOTOR_TRASEIRO_DIREITO, velocidade_assinada);
+}
+
+void definir_velocidades_diferenciais(int velocidade_esquerda, int velocidade_direita) {
+  int velocidade_esquerda_limitada = limitar_pwm_positivo(velocidade_esquerda);
+  int velocidade_direita_limitada = limitar_pwm_positivo(velocidade_direita);
+  definir_lado_esquerdo(velocidade_esquerda_limitada);
+  definir_lado_direito(velocidade_direita_limitada);
+}
+
+void parar_todos() {
+  definir_lado_esquerdo(0);
+  definir_lado_direito(0);
+}
+
+void iniciar_giro_180(int velocidade) {
+  if (giro_180_ativo) {
+    return;
+  }
+
+  int velocidade_giro = limitar_pwm_positivo(velocidade);
+  if (velocidade_giro == 0) {
+    velocidade_giro = VELOCIDADE_GIRO_180_PADRAO;
+  }
+
+  giro_180_ativo = true;
+  giro_180_ate_ms = millis() + DURACAO_GIRO_180_MS;
+  definir_lado_esquerdo(velocidade_giro);
+  definir_lado_direito(-velocidade_giro);
+}
+
+bool aplicar_comando(char comando, int velocidade_principal, int velocidade_direita) {
+  int velocidade = limitar_pwm_positivo(velocidade_principal);
+
+  switch (comando) {
+    case 'F':
+      giro_180_ativo = false;
+      definir_lado_esquerdo(velocidade);
+      definir_lado_direito(velocidade);
+      return true;
+
+    case 'B':
+      giro_180_ativo = false;
+      definir_lado_esquerdo(-velocidade);
+      definir_lado_direito(-velocidade);
+      return true;
+
+    case 'L':
+      giro_180_ativo = false;
+      definir_lado_esquerdo(-velocidade);
+      definir_lado_direito(velocidade);
+      return true;
+
+    case 'R':
+      giro_180_ativo = false;
+      definir_lado_esquerdo(velocidade);
+      definir_lado_direito(-velocidade);
+      return true;
+
+    case 'S':
+      giro_180_ativo = false;
+      parar_todos();
+      return true;
+
+    case 'U':
+      iniciar_giro_180(velocidade);
+      return true;
+
+    case 'D':
+      giro_180_ativo = false;
+      definir_velocidades_diferenciais(velocidade_principal, velocidade_direita);
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+void processar_linha_serial(char* linha) {
+  if (linha == nullptr) {
+    return;
+  }
+
+  char* inicio = avancar_espacos(linha);
+  remover_espacos_finais(inicio);
+  if (*inicio == '\0') {
+    return;
+  }
+
+  char comando = static_cast<char>(toupper(static_cast<unsigned char>(*inicio)));
+
+  if (comando == 'D') {
+    char* primeira_virgula = strchr(inicio, ',');
+    if (primeira_virgula == nullptr) {
+      return;
+    }
+
+    char* fim_esquerda = nullptr;
+    long valor_esquerda = strtol(primeira_virgula + 1, &fim_esquerda, 10);
+    if (fim_esquerda == primeira_virgula + 1 || fim_esquerda == nullptr || *fim_esquerda != ',') {
+      return;
+    }
+
+    char* fim_direita = nullptr;
+    long valor_direita = strtol(fim_esquerda + 1, &fim_direita, 10);
+    if (fim_direita == fim_esquerda + 1 || fim_direita == nullptr) {
+      return;
+    }
+
+    fim_direita = avancar_espacos(fim_direita);
+    if (*fim_direita != '\0') {
+      return;
+    }
+
+    aplicar_comando('D', static_cast<int>(valor_esquerda), static_cast<int>(valor_direita));
+    return;
+  }
+
+  int velocidade = VELOCIDADE_PADRAO;
+  char* resto = avancar_espacos(inicio + 1);
+
+  if (*resto == '\0') {
+    aplicar_comando(comando, velocidade, velocidade);
+    return;
+  }
+
+  if (*resto != ',') {
+    return;
+  }
+
+  char* fim_velocidade = nullptr;
+  long valor_velocidade = strtol(resto + 1, &fim_velocidade, 10);
+  if (fim_velocidade == resto + 1 || fim_velocidade == nullptr) {
+    return;
+  }
+
+  fim_velocidade = avancar_espacos(fim_velocidade);
+  if (*fim_velocidade != '\0') {
+    return;
+  }
+
+  velocidade = static_cast<int>(valor_velocidade);
+  aplicar_comando(comando, velocidade, velocidade);
+}
+
+void configurar_pinos() {
+  pinMode(MOTOR_TRASEIRO_ESQUERDO.pino_in1, OUTPUT);
+  pinMode(MOTOR_TRASEIRO_ESQUERDO.pino_in2, OUTPUT);
+  pinMode(MOTOR_TRASEIRO_ESQUERDO.pino_pwm, OUTPUT);
+
+  pinMode(MOTOR_TRASEIRO_DIREITO.pino_in1, OUTPUT);
+  pinMode(MOTOR_TRASEIRO_DIREITO.pino_in2, OUTPUT);
+  pinMode(MOTOR_TRASEIRO_DIREITO.pino_pwm, OUTPUT);
+
+  pinMode(MOTOR_FRENTE_ESQUERDO.pino_in1, OUTPUT);
+  pinMode(MOTOR_FRENTE_ESQUERDO.pino_in2, OUTPUT);
+  pinMode(MOTOR_FRENTE_ESQUERDO.pino_pwm, OUTPUT);
+
+  pinMode(MOTOR_FRENTE_DIREITO.pino_in1, OUTPUT);
+  pinMode(MOTOR_FRENTE_DIREITO.pino_in2, OUTPUT);
+  pinMode(MOTOR_FRENTE_DIREITO.pino_pwm, OUTPUT);
+
+  parar_todos();
 }
 
 void setup() {
-  pinMode(AIN1_F, OUTPUT);
-  pinMode(AIN2_F, OUTPUT);
-  pinMode(PWMA_F, OUTPUT);
-  pinMode(BIN1_F, OUTPUT);
-  pinMode(BIN2_F, OUTPUT);
-  pinMode(PWMB_F, OUTPUT);
-
-  pinMode(AIN1_R, OUTPUT);
-  pinMode(AIN2_R, OUTPUT);
-  pinMode(PWMA_R, OUTPUT);
-  pinMode(BIN1_R, OUTPUT);
-  pinMode(BIN2_R, OUTPUT);
-  pinMode(PWMB_R, OUTPUT);
-
-  pinMode(STBY, OUTPUT);
-  digitalWrite(STBY, HIGH);
-
-  stopAll();
+  configurar_pinos();
   Serial.begin(115200);
 }
 
 void loop() {
   while (Serial.available() > 0) {
-    char c = Serial.read();
-    if (c == '\n') {
-      handleLine(buffer);
-      buffer = "";
-    } else if (c != '\r') {
-      buffer += c;
+    char caractere = static_cast<char>(Serial.read());
+
+    if (caractere == '\n') {
+      buffer_serial[indice_buffer_serial] = '\0';
+      processar_linha_serial(buffer_serial);
+      indice_buffer_serial = 0;
+      continue;
+    }
+
+    if (caractere == '\r') {
+      continue;
+    }
+
+    if (!isprint(static_cast<unsigned char>(caractere)) && caractere != '\t') {
+      continue;
+    }
+
+    if (indice_buffer_serial < TAMANHO_BUFFER_SERIAL - 1) {
+      buffer_serial[indice_buffer_serial++] = caractere;
+    } else {
+      // Descarta pacote muito grande para evitar comandos parciais perigosos.
+      indice_buffer_serial = 0;
     }
   }
 
-  if (turn_active && millis() >= turn_until) {
-    stopAll();
-    turn_active = false;
+  if (giro_180_ativo && static_cast<long>(millis() - giro_180_ate_ms) >= 0) {
+    giro_180_ativo = false;
+    parar_todos();
   }
 }
