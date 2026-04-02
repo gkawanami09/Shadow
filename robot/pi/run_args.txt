@@ -1,12 +1,12 @@
 --roi 0.40
 --invert
---verde-zona 0.45
+--verde-zona-min 0.45
 --verde-hmin 35
 --verde-hmax 95
 --verde-smin 60
 --verde-vmin 60
 --verde-area-min 250
---vermelho-zona 0.45
+--vermelho-zona-min 0.45
 --vermelho-hmin1 0
 --vermelho-hmax1 10
 --vermelho-hmin2 170
@@ -14,11 +14,8 @@
 --vermelho-smin 70
 --vermelho-vmin 50
 --vermelho-area-min 250
---vermelho-tempo-parado 20
---intersecao-largura 0.55
---intersecao-lado-min 0.20
---giro-180-tempo 1.2
---beco-cooldown 2.0
+--limiar-intersecao 0.55
+--limiar-intersecao-lado 0.20
 
 
 --device 0
