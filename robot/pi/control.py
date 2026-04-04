@@ -356,12 +356,13 @@ def principal():
     ser = None
 
     try:
+        priorizar_picamera2 = parametros.device is None
         camera = iniciar_camera(
             device=parametros.device,
             width=parametros.width,
             height=parametros.height,
             framerate=parametros.fps,
-            prefer_picamera2=False,
+            prefer_picamera2=priorizar_picamera2,
             fallback_picamera2=True,
         )
     except RuntimeError as excecao:
