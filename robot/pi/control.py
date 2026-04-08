@@ -28,6 +28,7 @@ from vision import ConfiguracaoVisao, EstadoVisao, analisar_quadro
 ESTADO_INICIANDO = "INICIANDO"
 ESTADO_SEGUINDO = "SEGUINDO_LINHA"
 ESTADO_SEM_LINHA = "SEM_LINHA"
+ESTADO_RECUPERANDO = "RECUPERANDO_LINHA"
 
 
 @dataclass
@@ -38,6 +39,8 @@ class EstadoControle:
     instante_ultimo_envio: float = 0.0
     velocidade_esquerda_anterior: int = 0
     velocidade_direita_anterior: int = 0
+    erro_linha_anterior: float = 0.0
+    lado_preferencial_recuperacao: int = 0
 
 
 class ControladorPID:
@@ -112,12 +115,65 @@ def _limitar_pwm_assinado(valor):
     return int(_limitar(int(round(valor)), -255, 255))
 
 
+def _interpolar(valor_inicial, valor_final, proporcao):
+    proporcao = _limitar(float(proporcao), 0.0, 1.0)
+    return float(valor_inicial) + (float(valor_final) - float(valor_inicial)) * proporcao
+
+
 def _aplicar_piso_assinado(valor, piso):
     if valor > 0:
         return max(valor, piso)
     if valor < 0:
         return min(valor, -piso)
     return 0
+
+
+def _obter_risco_lateral(erro_linha, estado_controle, parametros):
+    erro_abs = abs(erro_linha)
+    direcao_erro = 0
+    if erro_linha > 0.0:
+        direcao_erro = 1
+    elif erro_linha < 0.0:
+        direcao_erro = -1
+
+    delta_erro = erro_linha - estado_controle.erro_linha_anterior
+    afastando = direcao_erro != 0 and (delta_erro * direcao_erro) > parametros.delta_erro_antecipacao
+
+    perto_borda = erro_abs >= parametros.limiar_erro_borda
+    risco_alto = erro_abs >= parametros.limiar_erro_risco
+    risco_medio = erro_abs >= parametros.limiar_erro_antecipacao and afastando
+
+    return {
+        "direcao": direcao_erro,
+        "delta": delta_erro,
+        "perto_borda": perto_borda,
+        "afastando": afastando,
+        "risco_alto": risco_alto,
+        "risco_medio": risco_medio,
+    }
+
+
+def _calcular_acao_recuperacao(estado_controle, parametros):
+    lado = estado_controle.lado_preferencial_recuperacao
+    if lado == 0:
+        lado = 1 if estado_controle.erro_linha_anterior >= 0.0 else -1
+        if lado == 0:
+            lado = 1
+
+    velocidade_externa = _limitar(
+        parametros.velocidade_recuperacao,
+        parametros.velocidade_minima,
+        parametros.velocidade_maxima,
+    )
+    velocidade_interna = _limitar(
+        parametros.velocidade_recuperacao_reversa,
+        parametros.velocidade_minima,
+        parametros.velocidade_maxima,
+    )
+
+    if lado > 0:
+        return _criar_acao_diferencial(velocidade_externa, -velocidade_interna)
+    return _criar_acao_diferencial(-velocidade_interna, velocidade_externa)
 
 
 def _criar_acao_parar():
@@ -167,8 +223,19 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
     correcao_pid = pid.calcular(erro_linha, tempo_atual)
     correcao_pid = _limitar(correcao_pid, -parametros.correcao_maxima, parametros.correcao_maxima)
     erro_abs = abs(erro_linha)
+    risco_lateral = _obter_risco_lateral(erro_linha, dados_visao["estado_controle"], parametros)
+    confianca_baixa = dados_visao["confianca_linha"] <= parametros.limiar_confianca_pivo
 
-    if erro_abs >= parametros.limiar_erro_pivo:
+    usar_pivo = (
+        erro_abs >= parametros.limiar_erro_pivo
+        and (
+            erro_abs >= parametros.limiar_erro_pivo_critico
+            or confianca_baixa
+            or risco_lateral["perto_borda"]
+        )
+    )
+
+    if usar_pivo:
         velocidade_pivo = _limitar(
             parametros.velocidade_pivo,
             parametros.velocidade_minima,
@@ -182,21 +249,55 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
             velocidade_direita = velocidade_pivo
         return _criar_acao_diferencial(velocidade_esquerda, velocidade_direita), correcao_pid
 
-    if erro_abs >= parametros.limiar_erro_curva:
-        velocidade_base = parametros.velocidade_curva
-    else:
-        velocidade_base = parametros.velocidade_base
+    faixa_curva = max(1e-6, parametros.limiar_erro_pivo - parametros.limiar_erro_curva)
+    proporcao_curva = _limitar((erro_abs - parametros.limiar_erro_curva) / faixa_curva, 0.0, 1.0)
+    velocidade_base = _interpolar(
+        parametros.velocidade_base,
+        parametros.velocidade_curva,
+        proporcao_curva,
+    )
 
-    velocidade_esquerda = _limitar(
-        _aplicar_piso_assinado(velocidade_base + correcao_pid, parametros.velocidade_minima),
-        -parametros.velocidade_maxima,
-        parametros.velocidade_maxima,
-    )
-    velocidade_direita = _limitar(
-        _aplicar_piso_assinado(velocidade_base - correcao_pid, parametros.velocidade_minima),
-        -parametros.velocidade_maxima,
-        parametros.velocidade_maxima,
-    )
+    if risco_lateral["risco_alto"]:
+        velocidade_base = min(velocidade_base, float(parametros.velocidade_risco))
+        correcao_pid += risco_lateral["direcao"] * parametros.bonus_correcao_risco
+    elif risco_lateral["risco_medio"]:
+        velocidade_base = min(velocidade_base, float(parametros.velocidade_antecipacao))
+        correcao_pid += risco_lateral["direcao"] * parametros.bonus_correcao_antecipacao
+
+    if confianca_baixa:
+        velocidade_base = min(velocidade_base, float(parametros.velocidade_confianca_baixa))
+        correcao_pid += risco_lateral["direcao"] * parametros.bonus_correcao_confianca
+
+    velocidade_esquerda_bruta = velocidade_base + correcao_pid
+    velocidade_direita_bruta = velocidade_base - correcao_pid
+
+    if erro_abs < parametros.limiar_erro_reversao:
+        velocidade_esquerda = _limitar(
+            max(0.0, velocidade_esquerda_bruta),
+            0.0,
+            float(parametros.velocidade_maxima),
+        )
+        velocidade_direita = _limitar(
+            max(0.0, velocidade_direita_bruta),
+            0.0,
+            float(parametros.velocidade_maxima),
+        )
+
+        if velocidade_esquerda > 0.0:
+            velocidade_esquerda = max(velocidade_esquerda, float(parametros.velocidade_minima))
+        if velocidade_direita > 0.0:
+            velocidade_direita = max(velocidade_direita, float(parametros.velocidade_minima))
+    else:
+        velocidade_esquerda = _limitar(
+            _aplicar_piso_assinado(velocidade_esquerda_bruta, parametros.velocidade_minima),
+            -parametros.velocidade_maxima,
+            parametros.velocidade_maxima,
+        )
+        velocidade_direita = _limitar(
+            _aplicar_piso_assinado(velocidade_direita_bruta, parametros.velocidade_minima),
+            -parametros.velocidade_maxima,
+            parametros.velocidade_maxima,
+        )
 
     return _criar_acao_diferencial(velocidade_esquerda, velocidade_direita), correcao_pid
 
@@ -215,6 +316,16 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
         dados_visao["linha_encontrada"]
         and dados_visao["confianca_linha"] >= parametros.limiar_confianca
     )
+    linha_fraca = bool(
+        dados_visao["linha_encontrada"]
+        and dados_visao["confianca_linha"] >= parametros.limiar_confianca_minima_recuperacao
+    )
+
+    if dados_visao["linha_encontrada"]:
+        if dados_visao["erro_linha"] > 0.03:
+            estado_controle.lado_preferencial_recuperacao = 1
+        elif dados_visao["erro_linha"] < -0.03:
+            estado_controle.lado_preferencial_recuperacao = -1
 
     if linha_valida:
         if estado_controle.estado_atual != ESTADO_SEGUINDO:
@@ -222,11 +333,50 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
             estado_controle.tempo_entrada_estado = agora
             pid.reiniciar(suave=True)
 
-        acao, correcao_pid = _calcular_acao_pid(dados_visao, pid, parametros, agora)
+        dados_visao_controle = dict(dados_visao)
+        dados_visao_controle["estado_controle"] = estado_controle
+
+        acao, correcao_pid = _calcular_acao_pid(dados_visao_controle, pid, parametros, agora)
         estado_controle.velocidade_esquerda_anterior = acao["velocidade_esquerda"]
         estado_controle.velocidade_direita_anterior = acao["velocidade_direita"]
-        motivo = "seguindo linha com PID"
+        estado_controle.erro_linha_anterior = dados_visao["erro_linha"]
+        if acao["tipo"] == "D" and (
+            acao["velocidade_esquerda"] < 0 or acao["velocidade_direita"] < 0
+        ):
+            motivo = "curva critica com reversao controlada"
+        elif abs(dados_visao["erro_linha"]) >= parametros.limiar_erro_risco:
+            motivo = "correcao imediata por risco lateral"
+        elif abs(dados_visao["erro_linha"]) >= parametros.limiar_erro_antecipacao:
+            motivo = "antecipando fuga lateral"
+        else:
+            motivo = "seguindo linha com PID suave"
         return acao, motivo, correcao_pid
+
+    if linha_fraca:
+        if estado_controle.estado_atual != ESTADO_RECUPERANDO:
+            estado_controle.estado_atual = ESTADO_RECUPERANDO
+            estado_controle.tempo_entrada_estado = agora
+            pid.reiniciar(suave=False)
+
+        estado_controle.erro_linha_anterior = dados_visao["erro_linha"]
+        acao = _calcular_acao_recuperacao(estado_controle, parametros)
+        estado_controle.velocidade_esquerda_anterior = acao["velocidade_esquerda"]
+        estado_controle.velocidade_direita_anterior = acao["velocidade_direita"]
+        return acao, "recuperando linha com leitura fraca", correcao_pid
+
+    if (
+        dados_visao["tempo_sem_linha"] <= parametros.tempo_recuperacao_linha
+        and estado_controle.lado_preferencial_recuperacao != 0
+    ):
+        if estado_controle.estado_atual != ESTADO_RECUPERANDO:
+            estado_controle.estado_atual = ESTADO_RECUPERANDO
+            estado_controle.tempo_entrada_estado = agora
+            pid.reiniciar(suave=False)
+
+        acao = _calcular_acao_recuperacao(estado_controle, parametros)
+        estado_controle.velocidade_esquerda_anterior = acao["velocidade_esquerda"]
+        estado_controle.velocidade_direita_anterior = acao["velocidade_direita"]
+        return acao, "linha perdida, buscando ultimo lado conhecido", correcao_pid
 
     if estado_controle.estado_atual != ESTADO_SEM_LINHA:
         estado_controle.estado_atual = ESTADO_SEM_LINHA
@@ -235,6 +385,7 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
     pid.reiniciar(suave=True)
     estado_controle.velocidade_esquerda_anterior = 0
     estado_controle.velocidade_direita_anterior = 0
+    estado_controle.erro_linha_anterior = 0.0
     motivo = "linha ausente ou confianca baixa"
     return _criar_acao_parar(), motivo, correcao_pid
 
@@ -315,6 +466,7 @@ def analisar_argumentos():
     analisador.add_argument("--area-minima-linha", type=int, default=320)
     analisador.add_argument("--suavizacao-erro", type=float, default=0.40)
     analisador.add_argument("--limiar-confianca", type=float, default=0.10)
+    analisador.add_argument("--limiar-confianca-minima-recuperacao", type=float, default=0.03)
 
     analisador.add_argument("--kp", type=float, default=145.0)
     analisador.add_argument("--ki", type=float, default=10.0)
@@ -324,12 +476,27 @@ def analisar_argumentos():
     analisador.add_argument("--alpha-derivada", type=float, default=0.25)
     analisador.add_argument("--correcao-maxima", type=float, default=200.0)
 
-    analisador.add_argument("--velocidade-base", type=int, default=75)
-    analisador.add_argument("--velocidade-curva", type=int, default=55)
+    analisador.add_argument("--velocidade-base", type=int, default=82)
+    analisador.add_argument("--velocidade-curva", type=int, default=64)
     analisador.add_argument("--velocidade-minima", type=int, default=45)
-    analisador.add_argument("--velocidade-maxima", type=int, default=120)
+    analisador.add_argument("--velocidade-maxima", type=int, default=135)
     analisador.add_argument("--limiar-erro-curva", type=float, default=0.12)
-    analisador.add_argument("--limiar-erro-pivo", type=float, default=0.52)
+    analisador.add_argument("--limiar-erro-reversao", type=float, default=0.58)
+    analisador.add_argument("--limiar-erro-pivo", type=float, default=0.72)
+    analisador.add_argument("--limiar-erro-pivo-critico", type=float, default=0.88)
+    analisador.add_argument("--limiar-confianca-pivo", type=float, default=0.16)
+    analisador.add_argument("--limiar-erro-antecipacao", type=float, default=0.22)
+    analisador.add_argument("--limiar-erro-risco", type=float, default=0.34)
+    analisador.add_argument("--limiar-erro-borda", type=float, default=0.58)
+    analisador.add_argument("--delta-erro-antecipacao", type=float, default=0.035)
+    analisador.add_argument("--velocidade-antecipacao", type=int, default=56)
+    analisador.add_argument("--velocidade-risco", type=int, default=48)
+    analisador.add_argument("--velocidade-confianca-baixa", type=int, default=44)
+    analisador.add_argument("--velocidade-recuperacao", type=int, default=62)
+    analisador.add_argument("--velocidade-recuperacao-reversa", type=int, default=56)
+    analisador.add_argument("--bonus-correcao-antecipacao", type=float, default=18.0)
+    analisador.add_argument("--bonus-correcao-risco", type=float, default=34.0)
+    analisador.add_argument("--bonus-correcao-confianca", type=float, default=22.0)
     analisador.add_argument("--velocidade-pivo", type=int, default=90)
     analisador.add_argument(
         "--inverter-correcao",
@@ -338,6 +505,7 @@ def analisar_argumentos():
     )
 
     analisador.add_argument("--tempo-inicial", type=float, default=0.35)
+    analisador.add_argument("--tempo-recuperacao-linha", type=float, default=0.28)
 
     analisador.add_argument("--port", type=str, default=None, help="Porta serial (ex: /dev/ttyACM0).")
     analisador.add_argument("--baud", type=int, default=115200)
