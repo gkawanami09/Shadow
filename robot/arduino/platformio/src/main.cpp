@@ -82,8 +82,8 @@ void definir_lado_direito(int velocidade_assinada) {
 }
 
 void definir_velocidades_diferenciais(int velocidade_esquerda, int velocidade_direita) {
-  int velocidade_esquerda_limitada = limitar_pwm_positivo(velocidade_esquerda);
-  int velocidade_direita_limitada = limitar_pwm_positivo(velocidade_direita);
+  int velocidade_esquerda_limitada = constrain(velocidade_esquerda, -255, 255);
+  int velocidade_direita_limitada = constrain(velocidade_direita, -255, 255);
   definir_lado_esquerdo(velocidade_esquerda_limitada);
   definir_lado_direito(velocidade_direita_limitada);
 }

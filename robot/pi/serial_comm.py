@@ -16,6 +16,10 @@ def _limitar_pwm(valor):
     return max(0, min(255, int(valor)))
 
 
+def _limitar_pwm_assinado(valor):
+    return max(-255, min(255, int(valor)))
+
+
 def _formatar_comando(comando, velocidade=None):
     if velocidade is None:
         return f"{comando}\n"
@@ -23,8 +27,8 @@ def _formatar_comando(comando, velocidade=None):
 
 
 def _formatar_comando_diferencial(velocidade_esquerda, velocidade_direita):
-    esquerda = _limitar_pwm(velocidade_esquerda)
-    direita = _limitar_pwm(velocidade_direita)
+    esquerda = _limitar_pwm_assinado(velocidade_esquerda)
+    direita = _limitar_pwm_assinado(velocidade_direita)
     return f"{COMANDO_DIFERENCIAL},{esquerda},{direita}\n"
 
 

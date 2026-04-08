@@ -108,6 +108,18 @@ def _limitar_pwm(valor):
     return int(_limitar(int(round(valor)), 0, 255))
 
 
+def _limitar_pwm_assinado(valor):
+    return int(_limitar(int(round(valor)), -255, 255))
+
+
+def _aplicar_piso_assinado(valor, piso):
+    if valor > 0:
+        return max(valor, piso)
+    if valor < 0:
+        return min(valor, -piso)
+    return 0
+
+
 def _criar_acao_parar():
     return {"tipo": "S"}
 
@@ -115,8 +127,8 @@ def _criar_acao_parar():
 def _criar_acao_diferencial(velocidade_esquerda, velocidade_direita):
     return {
         "tipo": "D",
-        "velocidade_esquerda": _limitar_pwm(velocidade_esquerda),
-        "velocidade_direita": _limitar_pwm(velocidade_direita),
+        "velocidade_esquerda": _limitar_pwm_assinado(velocidade_esquerda),
+        "velocidade_direita": _limitar_pwm_assinado(velocidade_direita),
     }
 
 
@@ -150,22 +162,39 @@ def _enviar_acao_serial(ser, acao):
 
 def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
     erro_linha = dados_visao["erro_linha"]
+    if parametros.inverter_correcao:
+        erro_linha = -erro_linha
     correcao_pid = pid.calcular(erro_linha, tempo_atual)
     correcao_pid = _limitar(correcao_pid, -parametros.correcao_maxima, parametros.correcao_maxima)
+    erro_abs = abs(erro_linha)
 
-    if abs(erro_linha) >= parametros.limiar_erro_curva:
+    if erro_abs >= parametros.limiar_erro_pivo:
+        velocidade_pivo = _limitar(
+            parametros.velocidade_pivo,
+            parametros.velocidade_minima,
+            parametros.velocidade_maxima,
+        )
+        if erro_linha >= 0.0:
+            velocidade_esquerda = velocidade_pivo
+            velocidade_direita = -velocidade_pivo
+        else:
+            velocidade_esquerda = -velocidade_pivo
+            velocidade_direita = velocidade_pivo
+        return _criar_acao_diferencial(velocidade_esquerda, velocidade_direita), correcao_pid
+
+    if erro_abs >= parametros.limiar_erro_curva:
         velocidade_base = parametros.velocidade_curva
     else:
         velocidade_base = parametros.velocidade_base
 
     velocidade_esquerda = _limitar(
-        velocidade_base + correcao_pid,
-        parametros.velocidade_minima,
+        _aplicar_piso_assinado(velocidade_base + correcao_pid, parametros.velocidade_minima),
+        -parametros.velocidade_maxima,
         parametros.velocidade_maxima,
     )
     velocidade_direita = _limitar(
-        velocidade_base - correcao_pid,
-        parametros.velocidade_minima,
+        _aplicar_piso_assinado(velocidade_base - correcao_pid, parametros.velocidade_minima),
+        -parametros.velocidade_maxima,
         parametros.velocidade_maxima,
     )
 
@@ -287,25 +316,32 @@ def analisar_argumentos():
     analisador.add_argument("--suavizacao-erro", type=float, default=0.40)
     analisador.add_argument("--limiar-confianca", type=float, default=0.10)
 
-    analisador.add_argument("--kp", type=float, default=72.0)
-    analisador.add_argument("--ki", type=float, default=6.0)
-    analisador.add_argument("--kd", type=float, default=20.0)
+    analisador.add_argument("--kp", type=float, default=145.0)
+    analisador.add_argument("--ki", type=float, default=10.0)
+    analisador.add_argument("--kd", type=float, default=42.0)
     analisador.add_argument("--integral-max", type=float, default=0.85)
     analisador.add_argument("--dt-minimo", type=float, default=0.01)
     analisador.add_argument("--alpha-derivada", type=float, default=0.25)
-    analisador.add_argument("--correcao-maxima", type=float, default=70.0)
+    analisador.add_argument("--correcao-maxima", type=float, default=200.0)
 
-    analisador.add_argument("--velocidade-base", type=int, default=150)
-    analisador.add_argument("--velocidade-curva", type=int, default=132)
-    analisador.add_argument("--velocidade-minima", type=int, default=105)
-    analisador.add_argument("--velocidade-maxima", type=int, default=180)
-    analisador.add_argument("--limiar-erro-curva", type=float, default=0.30)
+    analisador.add_argument("--velocidade-base", type=int, default=75)
+    analisador.add_argument("--velocidade-curva", type=int, default=55)
+    analisador.add_argument("--velocidade-minima", type=int, default=45)
+    analisador.add_argument("--velocidade-maxima", type=int, default=120)
+    analisador.add_argument("--limiar-erro-curva", type=float, default=0.12)
+    analisador.add_argument("--limiar-erro-pivo", type=float, default=0.52)
+    analisador.add_argument("--velocidade-pivo", type=int, default=90)
+    analisador.add_argument(
+        "--inverter-correcao",
+        action="store_true",
+        help="Inverte o sentido da correcao lateral (use quando corrige para o lado errado).",
+    )
 
     analisador.add_argument("--tempo-inicial", type=float, default=0.35)
 
     analisador.add_argument("--port", type=str, default=None, help="Porta serial (ex: /dev/ttyACM0).")
     analisador.add_argument("--baud", type=int, default=115200)
-    analisador.add_argument("--comando-intervalo", type=float, default=0.10)
+    analisador.add_argument("--comando-intervalo", type=float, default=0.04)
 
     return analisador.parse_args()
 
