@@ -20,7 +20,14 @@ except ModuleNotFoundError as excecao:
     raise
 
 from camera import fechar_camera, iniciar_camera, ler_frame
-from serial_comm import abrir_serial, enviar_velocidades_diferenciais, fechar_serial, parar
+from serial_comm import (
+    abrir_serial,
+    enviar_velocidades_diferenciais,
+    fechar_serial,
+    giro_90_direita,
+    giro_90_esquerda,
+    parar,
+)
 from stream import ServidorStream
 from vision import ConfiguracaoVisao, EstadoVisao, analisar_quadro
 
@@ -29,6 +36,7 @@ ESTADO_INICIANDO = "INICIANDO"
 ESTADO_SEGUINDO = "SEGUINDO_LINHA"
 ESTADO_SEM_LINHA = "SEM_LINHA"
 ESTADO_RECUPERANDO = "RECUPERANDO_LINHA"
+ESTADO_MANOBRA_90 = "EXECUTANDO_CURVA_90"
 
 
 @dataclass
@@ -41,9 +49,12 @@ class EstadoControle:
     velocidade_direita_anterior: int = 0
     erro_linha_anterior: float = 0.0
     lado_preferencial_recuperacao: int = 0
+    manobra_ativa: dict | None = None
+    manobra_ativa_ate: float = 0.0
+    instante_ultimo_giro_90: float = -999.0
 
 
-class ControladorPID:
+class   ControladorPID:
     def __init__(self, kP, kI, kD, limite_integral, dt_minimo, alpha_derivada):
         self.kP = float(kP)
         self.kI = float(kI)
@@ -176,6 +187,22 @@ def _calcular_acao_recuperacao(estado_controle, parametros):
     return _criar_acao_diferencial(-velocidade_interna, velocidade_externa)
 
 
+def _ganho_lookahead_dinamico(erro_linha, erro_lookahead, confianca_lookahead, parametros):
+    erro_referencia = max(abs(float(erro_linha)), abs(float(erro_lookahead)))
+    faixa = max(1e-6, parametros.lookahead_erro_maximo - parametros.lookahead_erro_minimo)
+    proporcao = _limitar(
+        (erro_referencia - parametros.lookahead_erro_minimo) / faixa,
+        0.0,
+        1.0,
+    )
+    ganho_base = _interpolar(
+        parametros.ganho_lookahead_suave,
+        parametros.ganho_lookahead_forte,
+        proporcao,
+    )
+    return float(ganho_base * _limitar(confianca_lookahead, 0.0, 1.0))
+
+
 def _criar_acao_parar():
     return {"tipo": "S"}
 
@@ -188,9 +215,18 @@ def _criar_acao_diferencial(velocidade_esquerda, velocidade_direita):
     }
 
 
+def _criar_acao_giro_90(direcao, velocidade):
+    return {
+        "tipo": "L90" if direcao == "esquerda" else "R90",
+        "velocidade": _limitar_pwm(velocidade),
+    }
+
+
 def _assinatura_acao(acao):
     if acao["tipo"] == "D":
         return ("D", acao["velocidade_esquerda"], acao["velocidade_direita"])
+    if acao["tipo"] in {"L90", "R90"}:
+        return (acao["tipo"], acao["velocidade"])
     return ("S",)
 
 
@@ -198,6 +234,8 @@ def _deve_enviar(estado_controle, acao, agora, intervalo_minimo):
     assinatura = _assinatura_acao(acao)
     if assinatura != estado_controle.assinatura_ultima_acao:
         return True
+    if acao["tipo"] in {"L90", "R90"}:
+        return False
     return (agora - estado_controle.instante_ultimo_envio) >= intervalo_minimo
 
 
@@ -213,17 +251,58 @@ def _enviar_acao_serial(ser, acao):
         )
         return
 
+    if acao["tipo"] == "L90":
+        giro_90_esquerda(ser, acao["velocidade"])
+        return
+
+    if acao["tipo"] == "R90":
+        giro_90_direita(ser, acao["velocidade"])
+        return
+
     parar(ser)
+
+
+def _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora):
+    if (agora - estado_controle.instante_ultimo_giro_90) < parametros.cooldown_giro_90:
+        return None
+
+    if dados_visao["confianca_linha"] < parametros.limiar_confianca_curva_90_execucao:
+        return None
+
+    if dados_visao.get("confianca_curva_90", 0.0) < parametros.limiar_confianca_curva_90_execucao:
+        return None
+
+    if dados_visao.get("curva_90_esquerda"):
+        return "esquerda"
+    if dados_visao.get("curva_90_direita"):
+        return "direita"
+    return None
 
 
 def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
     erro_linha = dados_visao["erro_linha"]
+    erro_lookahead = float(dados_visao.get("erro_lookahead", erro_linha))
+    confianca_lookahead = float(dados_visao.get("confianca_lookahead", 0.0))
     if parametros.inverter_correcao:
         erro_linha = -erro_linha
-    correcao_pid = pid.calcular(erro_linha, tempo_atual)
+        erro_lookahead = -erro_lookahead
+
+    ganho_lookahead = _ganho_lookahead_dinamico(
+        erro_linha,
+        erro_lookahead,
+        confianca_lookahead,
+        parametros,
+    )
+    erro_controle = _limitar(
+        erro_linha + (erro_lookahead * ganho_lookahead),
+        -1.0,
+        1.0,
+    )
+
+    correcao_pid = pid.calcular(erro_controle, tempo_atual)
     correcao_pid = _limitar(correcao_pid, -parametros.correcao_maxima, parametros.correcao_maxima)
-    erro_abs = abs(erro_linha)
-    risco_lateral = _obter_risco_lateral(erro_linha, dados_visao["estado_controle"], parametros)
+    erro_abs = abs(erro_controle)
+    risco_lateral = _obter_risco_lateral(erro_controle, dados_visao["estado_controle"], parametros)
     confianca_baixa = dados_visao["confianca_linha"] <= parametros.limiar_confianca_pivo
 
     usar_pivo = (
@@ -241,7 +320,12 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
             parametros.velocidade_minima,
             parametros.velocidade_maxima,
         )
-        if erro_linha >= 0.0:
+        velocidade_pivo = _limitar(
+            velocidade_pivo + parametros.bonus_velocidade_pivo,
+            parametros.velocidade_minima,
+            parametros.velocidade_maxima,
+        )
+        if erro_controle >= 0.0:
             velocidade_esquerda = velocidade_pivo
             velocidade_direita = -velocidade_pivo
         else:
@@ -270,6 +354,20 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
 
     velocidade_esquerda_bruta = velocidade_base + correcao_pid
     velocidade_direita_bruta = velocidade_base - correcao_pid
+
+    if erro_abs >= parametros.limiar_erro_motor_forte:
+        bonus_motor = _interpolar(
+            0.0,
+            parametros.bonus_velocidade_motor_forte,
+            (erro_abs - parametros.limiar_erro_motor_forte)
+            / max(1e-6, 1.0 - parametros.limiar_erro_motor_forte),
+        )
+        if erro_controle >= 0.0:
+            velocidade_esquerda_bruta += bonus_motor
+            velocidade_direita_bruta -= bonus_motor * parametros.fator_freio_motor_interno
+        else:
+            velocidade_esquerda_bruta -= bonus_motor * parametros.fator_freio_motor_interno
+            velocidade_direita_bruta += bonus_motor
 
     if erro_abs < parametros.limiar_erro_reversao:
         velocidade_esquerda = _limitar(
@@ -312,6 +410,13 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
         estado_controle.estado_atual = ESTADO_SEM_LINHA
         estado_controle.tempo_entrada_estado = agora
 
+    if estado_controle.manobra_ativa is not None and agora < estado_controle.manobra_ativa_ate:
+        return estado_controle.manobra_ativa, "executando curva de 90 graus", correcao_pid
+
+    if estado_controle.manobra_ativa is not None and agora >= estado_controle.manobra_ativa_ate:
+        estado_controle.manobra_ativa = None
+        estado_controle.manobra_ativa_ate = 0.0
+
     linha_valida = bool(
         dados_visao["linha_encontrada"]
         and dados_visao["confianca_linha"] >= parametros.limiar_confianca
@@ -328,6 +433,20 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
             estado_controle.lado_preferencial_recuperacao = -1
 
     if linha_valida:
+        direcao_curva_90 = _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora)
+        if direcao_curva_90 is not None:
+            estado_controle.estado_atual = ESTADO_MANOBRA_90
+            estado_controle.tempo_entrada_estado = agora
+            estado_controle.instante_ultimo_giro_90 = agora
+            estado_controle.lado_preferencial_recuperacao = 1 if direcao_curva_90 == "direita" else -1
+            estado_controle.manobra_ativa = _criar_acao_giro_90(
+                direcao_curva_90,
+                parametros.velocidade_giro_90,
+            )
+            estado_controle.manobra_ativa_ate = agora + parametros.tempo_giro_90
+            pid.reiniciar(suave=False)
+            return estado_controle.manobra_ativa, f"curva de 90 graus {direcao_curva_90}", correcao_pid
+
         if estado_controle.estado_atual != ESTADO_SEGUINDO:
             estado_controle.estado_atual = ESTADO_SEGUINDO
             estado_controle.tempo_entrada_estado = agora
@@ -340,13 +459,18 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
         estado_controle.velocidade_esquerda_anterior = acao["velocidade_esquerda"]
         estado_controle.velocidade_direita_anterior = acao["velocidade_direita"]
         estado_controle.erro_linha_anterior = dados_visao["erro_linha"]
+        erro_referencia = max(
+            abs(dados_visao["erro_linha"]),
+            abs(float(dados_visao.get("erro_lookahead", 0.0))),
+        )
+
         if acao["tipo"] == "D" and (
             acao["velocidade_esquerda"] < 0 or acao["velocidade_direita"] < 0
         ):
             motivo = "curva critica com reversao controlada"
-        elif abs(dados_visao["erro_linha"]) >= parametros.limiar_erro_risco:
+        elif erro_referencia >= parametros.limiar_erro_risco:
             motivo = "correcao imediata por risco lateral"
-        elif abs(dados_visao["erro_linha"]) >= parametros.limiar_erro_antecipacao:
+        elif erro_referencia >= parametros.limiar_erro_antecipacao:
             motivo = "antecipando fuga lateral"
         else:
             motivo = "seguindo linha com PID suave"
@@ -393,6 +517,8 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
 def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, correcao_pid, pid, motivo):
     if acao["tipo"] == "D":
         texto_acao = f"D,{acao['velocidade_esquerda']},{acao['velocidade_direita']}"
+    elif acao["tipo"] in {"L90", "R90"}:
+        texto_acao = f"{acao['tipo']},{acao['velocidade']}"
     else:
         texto_acao = "S"
 
@@ -400,7 +526,12 @@ def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, co
         f"estado={estado_controle.estado_atual}",
         f"acao={texto_acao}",
         f"motivo={motivo}",
-        f"erro={dados_visao['erro_linha']:+.3f} conf={dados_visao['confianca_linha']:.2f}",
+        (
+            f"erro={dados_visao['erro_linha']:+.3f} "
+            f"la={dados_visao.get('erro_lookahead', 0.0):+.3f} "
+            f"conf={dados_visao['confianca_linha']:.2f} "
+            f"c90={dados_visao.get('confianca_curva_90', 0.0):.2f}"
+        ),
         f"pid_p={pid.erro_proporcional:+.3f} pid_i={pid.erro_integral:+.3f} pid_d={pid.erro_derivativo:+.3f}",
         f"correcao_pid={correcao_pid:+.2f}",
         f"tempo_sem_linha={dados_visao['tempo_sem_linha']:.2f}s",
@@ -423,6 +554,8 @@ def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, co
 def _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid):
     if acao["tipo"] == "D":
         texto_acao = f"D,{acao['velocidade_esquerda']},{acao['velocidade_direita']}"
+    elif acao["tipo"] in {"L90", "R90"}:
+        texto_acao = f"{acao['tipo']},{acao['velocidade']}"
     else:
         texto_acao = "S"
 
@@ -432,6 +565,8 @@ def _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid):
                 f"estado={estado_controle.estado_atual}",
                 f"acao={texto_acao}",
                 f"erro={dados_visao['erro_linha']:+.3f}",
+                f"lookahead={dados_visao.get('erro_lookahead', 0.0):+.3f}",
+                f"curva90={dados_visao.get('confianca_curva_90', 0.0):.2f}",
                 f"conf={dados_visao['confianca_linha']:.2f}",
                 f"pid={correcao_pid:+.2f}",
                 f"motivo={motivo}",
@@ -466,6 +601,18 @@ def analisar_argumentos():
     analisador.add_argument("--area-minima-linha", type=int, default=320)
     analisador.add_argument("--suavizacao-erro", type=float, default=0.40)
     analisador.add_argument("--limiar-confianca", type=float, default=0.10)
+    analisador.add_argument("--lookahead-fracao", type=float, default=0.42)
+    analisador.add_argument("--lookahead-minimo-pixels", type=int, default=18)
+    analisador.add_argument("--limiar-confianca-curva-90", type=float, default=0.22)
+    analisador.add_argument("--limiar-confianca-lookahead-curva-90", type=float, default=0.20)
+    analisador.add_argument("--limiar-erro-lookahead-curva-90", type=float, default=0.48)
+    analisador.add_argument("--limiar-delta-erro-curva-90", type=float, default=0.18)
+    analisador.add_argument("--limiar-erro-base-curva-90", type=float, default=0.22)
+    analisador.add_argument("--faixa-superior-curva-90", type=float, default=0.40)
+    analisador.add_argument("--faixa-inferior-curva-90", type=float, default=0.24)
+    analisador.add_argument("--densidade-lateral-curva-90", type=float, default=0.16)
+    analisador.add_argument("--densidade-oposta-max-curva-90", type=float, default=0.05)
+    analisador.add_argument("--densidade-base-centro-curva-90", type=float, default=0.10)
     analisador.add_argument("--limiar-confianca-minima-recuperacao", type=float, default=0.03)
 
     analisador.add_argument("--kp", type=float, default=145.0)
@@ -475,6 +622,10 @@ def analisar_argumentos():
     analisador.add_argument("--dt-minimo", type=float, default=0.01)
     analisador.add_argument("--alpha-derivada", type=float, default=0.25)
     analisador.add_argument("--correcao-maxima", type=float, default=200.0)
+    analisador.add_argument("--ganho-lookahead-suave", type=float, default=0.20)
+    analisador.add_argument("--ganho-lookahead-forte", type=float, default=0.95)
+    analisador.add_argument("--lookahead-erro-minimo", type=float, default=0.10)
+    analisador.add_argument("--lookahead-erro-maximo", type=float, default=0.42)
 
     analisador.add_argument("--velocidade-base", type=int, default=82)
     analisador.add_argument("--velocidade-curva", type=int, default=64)
@@ -497,7 +648,15 @@ def analisar_argumentos():
     analisador.add_argument("--bonus-correcao-antecipacao", type=float, default=18.0)
     analisador.add_argument("--bonus-correcao-risco", type=float, default=34.0)
     analisador.add_argument("--bonus-correcao-confianca", type=float, default=22.0)
-    analisador.add_argument("--velocidade-pivo", type=int, default=90)
+    analisador.add_argument("--limiar-erro-motor-forte", type=float, default=0.34)
+    analisador.add_argument("--bonus-velocidade-motor-forte", type=float, default=22.0)
+    analisador.add_argument("--fator-freio-motor-interno", type=float, default=0.65)
+    analisador.add_argument("--velocidade-pivo", type=int, default=96)
+    analisador.add_argument("--bonus-velocidade-pivo", type=int, default=14)
+    analisador.add_argument("--velocidade-giro-90", type=int, default=120)
+    analisador.add_argument("--tempo-giro-90", type=float, default=0.42)
+    analisador.add_argument("--cooldown-giro-90", type=float, default=0.90)
+    analisador.add_argument("--limiar-confianca-curva-90-execucao", type=float, default=0.26)
     analisador.add_argument(
         "--inverter-correcao",
         action="store_true",
@@ -523,6 +682,18 @@ def criar_configuracao_visao(parametros):
         area_minima_linha=parametros.area_minima_linha,
         suavizacao_erro=parametros.suavizacao_erro,
         limiar_confianca=parametros.limiar_confianca,
+        lookahead_fracao=parametros.lookahead_fracao,
+        lookahead_minimo_pixels=parametros.lookahead_minimo_pixels,
+        limiar_confianca_curva_90=parametros.limiar_confianca_curva_90,
+        limiar_confianca_lookahead_curva_90=parametros.limiar_confianca_lookahead_curva_90,
+        limiar_erro_lookahead_curva_90=parametros.limiar_erro_lookahead_curva_90,
+        limiar_delta_erro_curva_90=parametros.limiar_delta_erro_curva_90,
+        limiar_erro_base_curva_90=parametros.limiar_erro_base_curva_90,
+        faixa_superior_curva_90=parametros.faixa_superior_curva_90,
+        faixa_inferior_curva_90=parametros.faixa_inferior_curva_90,
+        densidade_lateral_curva_90=parametros.densidade_lateral_curva_90,
+        densidade_oposta_max_curva_90=parametros.densidade_oposta_max_curva_90,
+        densidade_base_centro_curva_90=parametros.densidade_base_centro_curva_90,
     )
 
 

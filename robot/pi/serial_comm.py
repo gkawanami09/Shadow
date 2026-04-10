@@ -10,6 +10,8 @@ COMANDO_ESQUERDA = "L"
 COMANDO_DIREITA = "R"
 COMANDO_GIRO_180 = "U"
 COMANDO_DIFERENCIAL = "D"
+COMANDO_GIRO_90_ESQUERDA = "L90"
+COMANDO_GIRO_90_DIREITA = "R90"
 
 
 def _limitar_pwm(valor):
@@ -88,6 +90,14 @@ def beco(ser, velocidade=None):
 
 def giro_180(ser, velocidade=None):
     enviar_serial(ser, COMANDO_GIRO_180, velocidade)
+
+
+def giro_90_esquerda(ser, velocidade=None):
+    enviar_serial(ser, COMANDO_GIRO_90_ESQUERDA, velocidade)
+
+
+def giro_90_direita(ser, velocidade=None):
+    enviar_serial(ser, COMANDO_GIRO_90_DIREITA, velocidade)
 
 
 def parar_vermelho(ser):

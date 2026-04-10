@@ -10,6 +10,8 @@ COMANDOS BASE (USADOS PELA LOGICA DA VISAO)
   L -> virar para a esquerda (giro curto)
   R -> virar para a direita (giro curto)
   U -> giro 180 (beco sem saida)
+  L90 -> giro programado de 90 graus para a esquerda
+  R90 -> giro programado de 90 graus para a direita
 
 NOMES REAIS NO PYTHON (robot/pi/serial_comm.py)
   parar(ser) -> S
@@ -21,6 +23,8 @@ NOMES REAIS NO PYTHON (robot/pi/serial_comm.py)
   corrigir_direita(ser, velocidade=None) -> R[,vel]
   beco(ser, velocidade=None) -> U[,vel]
   giro_180(ser, velocidade=None) -> U[,vel]
+  giro_90_esquerda(ser, velocidade=None) -> L90[,vel]
+  giro_90_direita(ser, velocidade=None) -> R90[,vel]
   parar_vermelho(ser) -> S (tempo controlado na Raspberry)
 
 OBSERVACOES

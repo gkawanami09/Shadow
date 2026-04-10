@@ -14,6 +14,18 @@ class ConfiguracaoVisao:
     area_minima_linha: int = 320
     suavizacao_erro: float = 0.40
     limiar_confianca: float = 0.10
+    lookahead_fracao: float = 0.42
+    lookahead_minimo_pixels: int = 18
+    limiar_confianca_curva_90: float = 0.22
+    limiar_confianca_lookahead_curva_90: float = 0.20
+    limiar_erro_lookahead_curva_90: float = 0.48
+    limiar_delta_erro_curva_90: float = 0.18
+    limiar_erro_base_curva_90: float = 0.22
+    faixa_superior_curva_90: float = 0.40
+    faixa_inferior_curva_90: float = 0.24
+    densidade_lateral_curva_90: float = 0.16
+    densidade_oposta_max_curva_90: float = 0.05
+    densidade_base_centro_curva_90: float = 0.10
 
 
 @dataclass
@@ -21,6 +33,7 @@ class EstadoVisao:
     tempo_ultima_linha: float = field(default_factory=time.monotonic)
     centro_x_anterior: float | None = None
     erro_suavizado_anterior: float = 0.0
+    erro_lookahead_anterior: float = 0.0
     lado_ultimo_erro: int = 0
 
 
@@ -151,6 +164,144 @@ def _selecionar_linha(mascara_linha, estado, configuracao):
     }
 
 
+def _calcular_erro_lookahead(info_linha, mascara_linha, estado, configuracao):
+    if not info_linha["linha_encontrada"] or info_linha["contorno"] is None:
+        return estado.erro_lookahead_anterior, 0.0, None
+
+    altura_roi, largura_roi = mascara_linha.shape[:2]
+    y_referencia = int(_limitar(altura_roi * float(configuracao.lookahead_fracao), 0, altura_roi - 1))
+
+    mascara_contorno = np.zeros_like(mascara_linha)
+    cv2.drawContours(mascara_contorno, [info_linha["contorno"]], -1, 255, thickness=cv2.FILLED)
+
+    faixa_superior = mascara_contorno[: max(1, y_referencia + 1), :]
+    pontos_y, pontos_x = np.where(faixa_superior > 0)
+    if pontos_x.size < max(1, int(configuracao.lookahead_minimo_pixels)):
+        return estado.erro_lookahead_anterior, 0.0, None
+
+    pesos = 1.0 + (1.0 - (pontos_y.astype(np.float32) / max(1.0, float(y_referencia + 1))))
+    centro_x_lookahead = float(np.average(pontos_x.astype(np.float32), weights=pesos))
+    erro_bruto_lookahead = (centro_x_lookahead - (largura_roi / 2.0)) / max(1.0, largura_roi / 2.0)
+    erro_bruto_lookahead = float(_limitar(erro_bruto_lookahead, -1.0, 1.0))
+
+    erro_lookahead = (
+        (1.0 - configuracao.suavizacao_erro) * estado.erro_lookahead_anterior
+        + configuracao.suavizacao_erro * erro_bruto_lookahead
+    )
+    erro_lookahead = float(_limitar(erro_lookahead, -1.0, 1.0))
+
+    faixa_relativa = pontos_x.size / max(1.0, largura_roi * max(1.0, y_referencia + 1))
+    confianca_lookahead = float(_limitar(0.55 + min(0.45, faixa_relativa * 6.0), 0.0, 1.0))
+
+    return erro_lookahead, confianca_lookahead, (int(round(centro_x_lookahead)), y_referencia)
+
+
+def _densidade_faixa(mascara, x_inicio, x_fim, y_inicio, y_fim):
+    altura, largura = mascara.shape[:2]
+    x_inicio = int(_limitar(x_inicio, 0, largura))
+    x_fim = int(_limitar(x_fim, 0, largura))
+    y_inicio = int(_limitar(y_inicio, 0, altura))
+    y_fim = int(_limitar(y_fim, 0, altura))
+    if x_fim <= x_inicio or y_fim <= y_inicio:
+        return 0.0
+
+    recorte = mascara[y_inicio:y_fim, x_inicio:x_fim]
+    return float(np.count_nonzero(recorte)) / float(recorte.size)
+
+
+def _detectar_curva_90(info_linha, mascara_linha, erro_lookahead, confianca_lookahead, configuracao):
+    if not info_linha["linha_encontrada"] or info_linha["contorno"] is None:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    if info_linha["confianca"] < configuracao.limiar_confianca_curva_90:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    if confianca_lookahead < configuracao.limiar_confianca_lookahead_curva_90:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    erro_base = float(info_linha["erro_suavizado"])
+    if abs(erro_lookahead) < configuracao.limiar_erro_lookahead_curva_90:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    if (abs(erro_lookahead) - abs(erro_base)) < configuracao.limiar_delta_erro_curva_90:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    if abs(erro_base) > configuracao.limiar_erro_base_curva_90:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    altura_roi, largura_roi = mascara_linha.shape[:2]
+    mascara_contorno = np.zeros_like(mascara_linha)
+    cv2.drawContours(mascara_contorno, [info_linha["contorno"]], -1, 255, thickness=cv2.FILLED)
+
+    y_faixa_superior = int(altura_roi * configuracao.faixa_superior_curva_90)
+    y_faixa_inferior = int(altura_roi * (1.0 - configuracao.faixa_inferior_curva_90))
+    terco = max(1, largura_roi // 3)
+
+    dens_top_left = _densidade_faixa(mascara_contorno, 0, terco, 0, y_faixa_superior)
+    dens_top_right = _densidade_faixa(mascara_contorno, largura_roi - terco, largura_roi, 0, y_faixa_superior)
+    dens_base_center = _densidade_faixa(
+        mascara_contorno,
+        terco,
+        largura_roi - terco,
+        y_faixa_inferior,
+        altura_roi,
+    )
+
+    if dens_base_center < configuracao.densidade_base_centro_curva_90:
+        return {
+            "curva_90_esquerda": False,
+            "curva_90_direita": False,
+            "confianca_curva_90": 0.0,
+        }
+
+    curva_90_esquerda = bool(
+        erro_lookahead < 0.0
+        and dens_top_left >= configuracao.densidade_lateral_curva_90
+        and dens_top_right <= configuracao.densidade_oposta_max_curva_90
+    )
+    curva_90_direita = bool(
+        erro_lookahead > 0.0
+        and dens_top_right >= configuracao.densidade_lateral_curva_90
+        and dens_top_left <= configuracao.densidade_oposta_max_curva_90
+    )
+
+    confianca_curva_90 = 0.0
+    if curva_90_esquerda:
+        confianca_curva_90 = min(1.0, dens_top_left + abs(erro_lookahead) * 0.5)
+    elif curva_90_direita:
+        confianca_curva_90 = min(1.0, dens_top_right + abs(erro_lookahead) * 0.5)
+
+    return {
+        "curva_90_esquerda": curva_90_esquerda,
+        "curva_90_direita": curva_90_direita,
+        "confianca_curva_90": float(confianca_curva_90),
+    }
+
+
 def analisar_quadro(quadro_bgr, configuracao, estado):
     tempo_atual = time.monotonic()
     y_roi, y_fim, largura_quadro = _obter_limites_roi(quadro_bgr.shape, configuracao.roi)
@@ -163,11 +314,25 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
     )
 
     info_linha = _selecionar_linha(mascara_linha, estado, configuracao)
+    erro_lookahead, confianca_lookahead, ponto_lookahead = _calcular_erro_lookahead(
+        info_linha,
+        mascara_linha,
+        estado,
+        configuracao,
+    )
+    deteccao_curva_90 = _detectar_curva_90(
+        info_linha,
+        mascara_linha,
+        erro_lookahead,
+        confianca_lookahead,
+        configuracao,
+    )
 
     if info_linha["linha_encontrada"]:
         estado.tempo_ultima_linha = tempo_atual
         estado.centro_x_anterior = info_linha["centro_x"]
         estado.erro_suavizado_anterior = info_linha["erro_suavizado"]
+        estado.erro_lookahead_anterior = erro_lookahead
 
         if info_linha["erro_suavizado"] > 0.02:
             estado.lado_ultimo_erro = 1
@@ -192,9 +357,20 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
         cv2.circle(quadro_debug, centro_linha, 7, (0, 165, 255), -1)
         cv2.line(quadro_debug, (centro_quadro_x, centro_linha[1]), centro_linha, (0, 165, 255), 2)
 
+    if ponto_lookahead is not None:
+        ponto_debug = (int(ponto_lookahead[0]), y_roi + int(ponto_lookahead[1]))
+        cv2.circle(quadro_debug, ponto_debug, 6, (0, 255, 0), -1)
+        cv2.line(quadro_debug, (centro_quadro_x, ponto_debug[1]), ponto_debug, (0, 255, 0), 2)
+
     textos = [
         f"linha={'SIM' if info_linha['linha_encontrada'] else 'NAO'} conf={info_linha['confianca']:.2f}",
         f"erro={info_linha['erro_suavizado']:+.3f} bruto={info_linha['erro_bruto']:+.3f}",
+        f"lookahead={erro_lookahead:+.3f} conf_la={confianca_lookahead:.2f}",
+        (
+            "90="
+            f"{'E' if deteccao_curva_90['curva_90_esquerda'] else ('D' if deteccao_curva_90['curva_90_direita'] else 'NAO')}"
+            f" conf90={deteccao_curva_90['confianca_curva_90']:.2f}"
+        ),
         f"tempo_sem_linha={tempo_sem_linha:.2f}s",
         f"limiar={limiar_usado}",
     ]
@@ -215,6 +391,11 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
     return {
         "erro_linha": info_linha["erro_suavizado"],
         "erro_bruto": info_linha["erro_bruto"],
+        "erro_lookahead": erro_lookahead,
+        "confianca_lookahead": confianca_lookahead,
+        "curva_90_esquerda": deteccao_curva_90["curva_90_esquerda"],
+        "curva_90_direita": deteccao_curva_90["curva_90_direita"],
+        "confianca_curva_90": deteccao_curva_90["confianca_curva_90"],
         "confianca_linha": info_linha["confianca"],
         "linha_encontrada": info_linha["linha_encontrada"],
         "lado_ultimo_erro": estado.lado_ultimo_erro,

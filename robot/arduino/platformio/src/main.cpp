@@ -9,7 +9,7 @@ struct PinosMotor {
   uint8_t pino_pwm;
 };
 
-// Mapeamento real informado pelo usuario.
+// Mapeamento
 const PinosMotor MOTOR_TRASEIRO_ESQUERDO = {2, 4, 3};
 const PinosMotor MOTOR_TRASEIRO_DIREITO = {13, 12, 11};
 const PinosMotor MOTOR_FRENTE_ESQUERDO = {10, 9, 5};
@@ -17,14 +17,16 @@ const PinosMotor MOTOR_FRENTE_DIREITO = {8, 7, 6};
 
 const int VELOCIDADE_PADRAO = 150;
 const int VELOCIDADE_GIRO_180_PADRAO = 130;
+const int VELOCIDADE_GIRO_90_PADRAO = 140;
 const unsigned long DURACAO_GIRO_180_MS = 1100;
+const unsigned long DURACAO_GIRO_90_MS = 520;
 
 const size_t TAMANHO_BUFFER_SERIAL = 64;
 char buffer_serial[TAMANHO_BUFFER_SERIAL];
 size_t indice_buffer_serial = 0;
 
-bool giro_180_ativo = false;
-unsigned long giro_180_ate_ms = 0;
+bool manobra_programada_ativa = false;
+unsigned long manobra_programada_ate_ms = 0;
 
 int limitar_pwm_positivo(int valor) {
   return constrain(valor, 0, 255);
@@ -93,52 +95,89 @@ void parar_todos() {
   definir_lado_direito(0);
 }
 
-void iniciar_giro_180(int velocidade) {
-  if (giro_180_ativo) {
-    return;
-  }
+void iniciar_manobra_programada(int velocidade_esquerda, int velocidade_direita, unsigned long duracao_ms) {
+  manobra_programada_ativa = true;
+  manobra_programada_ate_ms = millis() + duracao_ms;
+  definir_lado_esquerdo(velocidade_esquerda);
+  definir_lado_direito(velocidade_direita);
+}
 
+void iniciar_giro_180(int velocidade) {
   int velocidade_giro = limitar_pwm_positivo(velocidade);
   if (velocidade_giro == 0) {
     velocidade_giro = VELOCIDADE_GIRO_180_PADRAO;
   }
 
-  giro_180_ativo = true;
-  giro_180_ate_ms = millis() + DURACAO_GIRO_180_MS;
-  definir_lado_esquerdo(velocidade_giro);
-  definir_lado_direito(-velocidade_giro);
+  iniciar_manobra_programada(velocidade_giro, -velocidade_giro, DURACAO_GIRO_180_MS);
 }
 
-bool aplicar_comando(char comando, int velocidade_principal, int velocidade_direita) {
-  int velocidade = limitar_pwm_positivo(velocidade_principal);
+void iniciar_giro_90_esquerda(int velocidade) {
+  int velocidade_giro = limitar_pwm_positivo(velocidade);
+  if (velocidade_giro == 0) {
+    velocidade_giro = VELOCIDADE_GIRO_90_PADRAO;
+  }
 
-  switch (comando) {
+  iniciar_manobra_programada(-velocidade_giro, velocidade_giro, DURACAO_GIRO_90_MS);
+}
+
+void iniciar_giro_90_direita(int velocidade) {
+  int velocidade_giro = limitar_pwm_positivo(velocidade);
+  if (velocidade_giro == 0) {
+    velocidade_giro = VELOCIDADE_GIRO_90_PADRAO;
+  }
+
+  iniciar_manobra_programada(velocidade_giro, -velocidade_giro, DURACAO_GIRO_90_MS);
+}
+
+bool aplicar_comando(const char* comando, int velocidade_principal, int velocidade_direita) {
+  if (comando == nullptr || *comando == '\0') {
+    return false;
+  }
+
+  int velocidade = limitar_pwm_positivo(velocidade_principal);
+  bool comando_simples = (comando[0] != '\0' && comando[1] == '\0');
+
+  if (strcmp(comando, "L90") == 0) {
+    iniciar_giro_90_esquerda(velocidade);
+    return true;
+  }
+
+  if (strcmp(comando, "R90") == 0) {
+    iniciar_giro_90_direita(velocidade);
+    return true;
+  }
+
+  if (!comando_simples) {
+    return false;
+  }
+
+  switch (comando[0]) {
     case 'F':
-      giro_180_ativo = false;
+      manobra_programada_ativa = false;
       definir_lado_esquerdo(velocidade);
       definir_lado_direito(velocidade);
       return true;
 
     case 'B':
-      giro_180_ativo = false;
+      manobra_programada_ativa = false;
       definir_lado_esquerdo(-velocidade);
       definir_lado_direito(-velocidade);
       return true;
 
     case 'L':
-      giro_180_ativo = false;
+      manobra_programada_ativa = false;
       definir_lado_esquerdo(-velocidade);
       definir_lado_direito(velocidade);
       return true;
 
     case 'R':
-      giro_180_ativo = false;
+      manobra_programada_ativa = false;
       definir_lado_esquerdo(velocidade);
       definir_lado_direito(-velocidade);
       return true;
 
     case 'S':
-      giro_180_ativo = false;
+      manobra_programada_ativa = false;
       parar_todos();
       return true;
 
@@ -147,7 +186,7 @@ bool aplicar_comando(char comando, int velocidade_principal, int velocidade_dire
       return true;
 
     case 'D':
-      giro_180_ativo = false;
+      manobra_programada_ativa = false;
       definir_velocidades_diferenciais(velocidade_principal, velocidade_direita);
       return true;
 
@@ -168,9 +207,23 @@ void processar_linha_serial(char* linha) {
   }
 
   char comando = static_cast<char>(toupper(static_cast<unsigned char>(*inicio)));
+  char* separador = strchr(inicio, ',');
+  char comando_texto[12];
+  size_t tamanho_comando = 0;
 
-  if (comando == 'D') {
-    char* primeira_virgula = strchr(inicio, ',');
+  while (inicio[tamanho_comando] != '\0' &&
+         inicio[tamanho_comando] != ',' &&
+         inicio[tamanho_comando] != ' ' &&
+         inicio[tamanho_comando] != '\t' &&
+         tamanho_comando < (sizeof(comando_texto) - 1)) {
+    comando_texto[tamanho_comando] =
+        static_cast<char>(toupper(static_cast<unsigned char>(inicio[tamanho_comando])));
+    ++tamanho_comando;
+  }
+  comando_texto[tamanho_comando] = '\0';
+
+  if (strcmp(comando_texto, "D") == 0) {
+    char* primeira_virgula = separador;
     if (primeira_virgula == nullptr) {
       return;
     }
@@ -192,15 +245,16 @@ void processar_linha_serial(char* linha) {
       return;
     }
 
-    aplicar_comando('D', static_cast<int>(valor_esquerda), static_cast<int>(valor_direita));
+    aplicar_comando("D", static_cast<int>(valor_esquerda), static_cast<int>(valor_direita));
     return;
   }
 
   int velocidade = VELOCIDADE_PADRAO;
-  char* resto = avancar_espacos(inicio + 1);
+  char* resto = separador != nullptr ? separador : (inicio + tamanho_comando);
+  resto = avancar_espacos(resto);
 
   if (*resto == '\0') {
-    aplicar_comando(comando, velocidade, velocidade);
+    aplicar_comando(comando_texto, velocidade, velocidade);
     return;
   }
 
@@ -220,7 +274,7 @@ void processar_linha_serial(char* linha) {
   }
 
   velocidade = static_cast<int>(valor_velocidade);
-  aplicar_comando(comando, velocidade, velocidade);
+  aplicar_comando(comando_texto, velocidade, velocidade);
 }
 
 void configurar_pinos() {
@@ -275,8 +329,8 @@ void loop() {
     }
   }
 
-  if (giro_180_ativo && static_cast<long>(millis() - giro_180_ate_ms) >= 0) {
-    giro_180_ativo = false;
+  if (manobra_programada_ativa && static_cast<long>(millis() - manobra_programada_ate_ms) >= 0) {
+    manobra_programada_ativa = false;
     parar_todos();
   }
 }
