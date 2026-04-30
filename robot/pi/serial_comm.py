@@ -5,10 +5,6 @@ except Exception:  # pragma: no cover
 
 
 COMANDO_PARAR = "S"
-COMANDO_RETO = "F"
-COMANDO_ESQUERDA = "L"
-COMANDO_DIREITA = "R"
-COMANDO_GIRO_180 = "U"
 COMANDO_DIFERENCIAL = "D"
 COMANDO_GIRO_90_ESQUERDA = "L90"
 COMANDO_GIRO_90_DIREITA = "R90"
@@ -22,7 +18,7 @@ def _limitar_pwm_assinado(valor):
     return max(-255, min(255, int(valor)))
 
 
-def _formatar_comando(comando, velocidade=None):
+def _formatar_comando_simples(comando, velocidade=None):
     if velocidade is None:
         return f"{comando}\n"
     return f"{comando},{_limitar_pwm(velocidade)}\n"
@@ -34,6 +30,12 @@ def _formatar_comando_diferencial(velocidade_esquerda, velocidade_direita):
     return f"{COMANDO_DIFERENCIAL},{esquerda},{direita}\n"
 
 
+def _remapear_lados_para_hardware(velocidade_esquerda, velocidade_direita):
+    # O cabeamento atual responde com os lados fisicos invertidos; este remapeamento
+    # faz a API Python continuar semanticamente correta sem tocar no firmware.
+    return velocidade_direita, velocidade_esquerda
+
+
 def abrir_serial(porta=None, baud=115200, port=None):
     if porta is None:
         porta = port
@@ -42,66 +44,30 @@ def abrir_serial(porta=None, baud=115200, port=None):
     return serial.Serial(port=porta, baudrate=baud, timeout=0.1)
 
 
-def enviar_serial(ser, comando, velocidade=None):
+def _enviar_texto(ser, texto):
     if ser is None:
         return
-    pacote = _formatar_comando(comando, velocidade)
-    ser.write(pacote.encode("ascii"))
+    ser.write(texto.encode("ascii"))
 
 
 def enviar_velocidades_diferenciais(ser, velocidade_esquerda, velocidade_direita):
-    if ser is None:
-        return
-    pacote = _formatar_comando_diferencial(velocidade_esquerda, velocidade_direita)
-    ser.write(pacote.encode("ascii"))
-
-
-def parar(ser):
-    enviar_serial(ser, COMANDO_PARAR)
-
-
-def reto(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_RETO, velocidade)
-
-
-def reto_forte(ser):
-    enviar_serial(ser, COMANDO_RETO, 255)
-
-
-def virar_esquerda(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_ESQUERDA, velocidade)
-
-
-def virar_direita(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_DIREITA, velocidade)
-
-
-def corrigir_esquerda(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_ESQUERDA, velocidade)
-
-
-def corrigir_direita(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_DIREITA, velocidade)
-
-
-def beco(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_GIRO_180, velocidade)
-
-
-def giro_180(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_GIRO_180, velocidade)
+    velocidade_esquerda_hw, velocidade_direita_hw = _remapear_lados_para_hardware(
+        velocidade_esquerda,
+        velocidade_direita,
+    )
+    _enviar_texto(ser, _formatar_comando_diferencial(velocidade_esquerda_hw, velocidade_direita_hw))
 
 
 def giro_90_esquerda(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_GIRO_90_ESQUERDA, velocidade)
+    _enviar_texto(ser, _formatar_comando_simples(COMANDO_GIRO_90_DIREITA, velocidade))
 
 
 def giro_90_direita(ser, velocidade=None):
-    enviar_serial(ser, COMANDO_GIRO_90_DIREITA, velocidade)
+    _enviar_texto(ser, _formatar_comando_simples(COMANDO_GIRO_90_ESQUERDA, velocidade))
 
 
-def parar_vermelho(ser):
-    enviar_serial(ser, COMANDO_PARAR)
+def parar(ser):
+    _enviar_texto(ser, _formatar_comando_simples(COMANDO_PARAR))
 
 
 def fechar_serial(ser):
