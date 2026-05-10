@@ -35,6 +35,8 @@ from vision import ConfiguracaoVisao, EstadoVisao, analisar_quadro
 ESTADO_INICIANDO = "INICIANDO"
 ESTADO_SEGUINDO = "SEGUINDO_LINHA"
 ESTADO_SEM_LINHA = "SEM_LINHA"
+ESTADO_CONTENCAO = "CONTENDO_LINHA"
+ESTADO_BUSCA = "BUSCANDO_LINHA"
 ESTADO_MANOBRA_90 = "EXECUTANDO_CURVA_90"
 ESTADO_ASSISTENCIA_CURVA = "ASSISTINDO_CURVA"
 
@@ -49,6 +51,10 @@ class EstadoControle:
     manobra_ativa_ate: float = 0.0
     instante_ultimo_giro_90: float = -999.0
     instante_ultima_assistencia_curva: float = -999.0
+    ultimo_erro_confiavel: float = 0.0
+    ultima_direcao_confiavel: str | None = None
+    instante_ultima_linha_confiavel: float = -999.0
+    quadros_confiaveis_consecutivos: int = 0
 
 
 class ControladorPID:
@@ -211,6 +217,30 @@ def _compensar_re_esquerda(velocidade_esquerda, velocidade_direita, parametros):
     return velocidade_esquerda, velocidade_direita
 
 
+def _obter_pivo_esquerda_fixo(parametros):
+    velocidade_frente = _limitar_pwm(parametros.velocidade_pivo_esquerda_frente)
+    velocidade_reversa = _limitar_pwm(parametros.velocidade_pivo_esquerda_reversa)
+
+    if velocidade_frente <= 0:
+        velocidade_frente = _limitar_pwm(parametros.velocidade_pivo)
+    if velocidade_reversa <= 0:
+        velocidade_reversa = _limitar_pwm(parametros.velocidade_pivo)
+
+    return float(-velocidade_reversa), float(velocidade_frente)
+
+
+def _obter_pivo_direita_fixo(parametros):
+    velocidade_frente = _limitar_pwm(parametros.velocidade_pivo_direita_frente)
+    velocidade_reversa = _limitar_pwm(parametros.velocidade_pivo_direita_reversa)
+
+    if velocidade_frente <= 0:
+        velocidade_frente = _limitar_pwm(parametros.velocidade_pivo)
+    if velocidade_reversa <= 0:
+        velocidade_reversa = _limitar_pwm(parametros.velocidade_pivo)
+
+    return float(velocidade_frente), float(-velocidade_reversa)
+
+
 def _ganho_lookahead_dinamico(erro_linha, erro_lookahead, confianca_lookahead, parametros):
     erro_referencia = max(abs(float(erro_linha)), abs(float(erro_lookahead)))
     faixa = max(1e-6, parametros.lookahead_erro_maximo - parametros.lookahead_erro_minimo)
@@ -243,8 +273,218 @@ def _erro_referencia_curva(erro_controle, erro_lookahead, confianca_lookahead, p
         erro_referencia = max(
             erro_referencia,
             abs(float(erro_lookahead)) * float(parametros.fator_antecipacao_velocidade),
-        )
+    )
     return float(_limitar(erro_referencia, 0.0, 1.0))
+
+
+def _deve_forcar_pivo_curva_fechada(
+    erro_controle,
+    erro_lookahead,
+    confianca_lookahead,
+    dados_visao,
+    parametros,
+):
+    if abs(float(erro_controle)) >= float(parametros.limiar_erro_pivo_forcado):
+        return True
+
+    if (
+        confianca_lookahead >= float(parametros.limiar_confianca_lookahead_pivo_forcado)
+        and abs(float(erro_lookahead)) >= float(parametros.limiar_erro_lookahead_pivo_forcado)
+    ):
+        return True
+
+    if (
+        (
+            dados_visao.get("linha_toca_borda_esquerda")
+            or dados_visao.get("linha_toca_borda_direita")
+        )
+        and abs(float(erro_lookahead)) >= float(parametros.limiar_erro_lookahead_borda_pivo)
+    ):
+        return True
+
+    return False
+
+
+def _direcao_oposta(direcao):
+    if direcao == "esquerda":
+        return "direita"
+    if direcao == "direita":
+        return "esquerda"
+    return None
+
+
+def _direcao_correcao_por_erro(erro_visao, parametros, fallback=None):
+    if erro_visao > 0.0:
+        return _ajustar_direcao_para_chassi("direita", parametros)
+    if erro_visao < 0.0:
+        return _ajustar_direcao_para_chassi("esquerda", parametros)
+    return fallback
+
+
+def _criar_acao_busca_linha(direcao, velocidade_frente, velocidade_reversa, parametros):
+    direcao = direcao if direcao in {"esquerda", "direita"} else "direita"
+    velocidade_frente = _limitar_pwm(velocidade_frente)
+    velocidade_reversa = _limitar_pwm(velocidade_reversa)
+    if direcao == "esquerda":
+        velocidade_esquerda, velocidade_direita = _compensar_re_esquerda(
+            -velocidade_reversa,
+            velocidade_frente,
+            parametros,
+        )
+    else:
+        velocidade_esquerda = velocidade_frente
+        velocidade_direita = -velocidade_reversa
+
+    acao = _criar_acao_diferencial(velocidade_esquerda, velocidade_direita)
+    acao["modo"] = "busca_linha"
+    return acao
+
+
+def _calcular_erro_contencao(dados_visao, parametros):
+    erro_linha = float(dados_visao["erro_linha"])
+    erro_lookahead = float(dados_visao.get("erro_lookahead", erro_linha))
+    confianca_lookahead = _limitar(float(dados_visao.get("confianca_lookahead", 0.0)), 0.0, 1.0)
+    ganho_lookahead = float(parametros.ganho_lookahead_contencao) * confianca_lookahead
+    erro_contencao = _limitar(erro_linha + (erro_lookahead * ganho_lookahead), -1.0, 1.0)
+    if parametros.inverter_correcao:
+        erro_contencao = -erro_contencao
+    return float(erro_contencao)
+
+
+def _linha_minimamente_valida(dados_visao, parametros):
+    return bool(
+        dados_visao["linha_encontrada"]
+        and dados_visao["confianca_linha"] >= parametros.limiar_confianca
+    )
+
+
+def _linha_em_risco(dados_visao, parametros):
+    if not dados_visao["linha_encontrada"]:
+        return True
+    if dados_visao["confianca_linha"] < parametros.limiar_confianca_cautela:
+        return True
+    if abs(float(dados_visao["erro_linha"])) >= parametros.limiar_erro_contencao:
+        return True
+    if dados_visao.get("linha_toca_borda_esquerda") or dados_visao.get("linha_toca_borda_direita"):
+        return True
+    return False
+
+
+def _linha_confiavel_para_retomada(dados_visao, parametros):
+    return bool(
+        dados_visao["linha_encontrada"]
+        and dados_visao["confianca_linha"] >= parametros.limiar_confianca_retomada
+        and not dados_visao.get("linha_toca_borda_esquerda")
+        and not dados_visao.get("linha_toca_borda_direita")
+    )
+
+
+def _atualizar_memoria_linha(estado_controle, dados_visao, parametros, agora):
+    if not _linha_minimamente_valida(dados_visao, parametros):
+        estado_controle.quadros_confiaveis_consecutivos = 0
+        return
+
+    erro_visao = float(dados_visao["erro_linha"])
+    if erro_visao == 0.0:
+        if dados_visao.get("linha_toca_borda_esquerda"):
+            erro_visao = -1.0
+        elif dados_visao.get("linha_toca_borda_direita"):
+            erro_visao = 1.0
+
+    direcao = _direcao_correcao_por_erro(
+        erro_visao,
+        parametros,
+        fallback=estado_controle.ultima_direcao_confiavel,
+    )
+    if direcao is not None:
+        estado_controle.ultima_direcao_confiavel = direcao
+    estado_controle.ultimo_erro_confiavel = erro_visao
+
+    if _linha_confiavel_para_retomada(dados_visao, parametros):
+        estado_controle.instante_ultima_linha_confiavel = agora
+        estado_controle.quadros_confiaveis_consecutivos += 1
+    else:
+        estado_controle.quadros_confiaveis_consecutivos = 0
+
+
+def _obter_direcao_busca(estado_controle, parametros, agora):
+    direcao_base = estado_controle.ultima_direcao_confiavel
+    if direcao_base not in {"esquerda", "direita"}:
+        return None
+
+    decorrido = max(0.0, agora - estado_controle.tempo_entrada_estado)
+    if decorrido <= parametros.tempo_busca_mesmo_lado:
+        return direcao_base
+
+    fase = int((decorrido - parametros.tempo_busca_mesmo_lado) / max(0.05, parametros.tempo_varredura_busca))
+    if fase % 2 == 0:
+        return _direcao_oposta(direcao_base)
+    return direcao_base
+
+
+def _calcular_acao_busca_sem_linha(estado_controle, dados_visao, parametros, agora):
+    tempo_desde_linha_confiavel = agora - estado_controle.instante_ultima_linha_confiavel
+    if tempo_desde_linha_confiavel > parametros.tempo_memoria_busca:
+        return _criar_acao_parar(), "linha perdida alem da memoria segura"
+    if dados_visao["tempo_sem_linha"] > parametros.tempo_maximo_busca_sem_linha:
+        return _criar_acao_parar(), "busca expirou sem reencontrar a linha"
+
+    direcao_busca = _obter_direcao_busca(estado_controle, parametros, agora)
+    if direcao_busca is None:
+        return _criar_acao_parar(), "sem direcao confiavel para buscar a linha"
+
+    return (
+        _criar_acao_busca_linha(
+            direcao_busca,
+            parametros.velocidade_busca_linha,
+            parametros.velocidade_reversa_busca_linha,
+            parametros,
+        ),
+        f"busca lenta da linha para {direcao_busca}",
+    )
+
+
+def _calcular_acao_contencao(dados_visao, estado_controle, parametros):
+    erro_contencao = _calcular_erro_contencao(dados_visao, parametros)
+    direcao_borda = None
+    if dados_visao.get("linha_toca_borda_esquerda"):
+        direcao_borda = _ajustar_direcao_para_chassi("esquerda", parametros)
+    elif dados_visao.get("linha_toca_borda_direita"):
+        direcao_borda = _ajustar_direcao_para_chassi("direita", parametros)
+
+    if direcao_borda is not None or abs(erro_contencao) >= parametros.limiar_erro_contencao_pivo:
+        direcao_pivo = direcao_borda or _direcao_correcao_por_erro(
+            float(dados_visao["erro_linha"]),
+            parametros,
+            fallback=estado_controle.ultima_direcao_confiavel,
+        )
+        return (
+            _criar_acao_busca_linha(
+                direcao_pivo,
+                parametros.velocidade_contencao,
+                parametros.velocidade_reversa_contencao,
+                parametros,
+            ),
+            "contencao em pivo para manter a linha no quadro",
+            erro_contencao,
+        )
+
+    velocidade_base = float(min(parametros.velocidade_contencao, parametros.velocidade_maxima_contencao))
+    ajuste = min(
+        float(parametros.velocidade_maxima_contencao),
+        abs(erro_contencao) * float(parametros.ganho_correcao_contencao),
+    )
+    velocidade_esquerda = velocidade_base + ajuste if erro_contencao >= 0.0 else velocidade_base - ajuste
+    velocidade_direita = velocidade_base - ajuste if erro_contencao >= 0.0 else velocidade_base + ajuste
+
+    velocidade_esquerda = _limitar(velocidade_esquerda, 0.0, float(parametros.velocidade_maxima_contencao))
+    velocidade_direita = _limitar(velocidade_direita, 0.0, float(parametros.velocidade_maxima_contencao))
+
+    return (
+        _criar_acao_diferencial(velocidade_esquerda, velocidade_direita),
+        "contencao com avanco reduzido",
+        erro_contencao,
+    )
 
 
 def _criar_acao_parar():
@@ -361,17 +601,42 @@ def _enviar_acao_serial(ser, acao):
 def _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora):
     if (agora - estado_controle.instante_ultimo_giro_90) < parametros.cooldown_giro_90:
         return None
-    if dados_visao["confianca_linha"] < parametros.limiar_confianca_curva_90_execucao:
-        return None
     if dados_visao.get("curva_90_literal_esquerda"):
         return _ajustar_direcao_para_chassi("esquerda", parametros)
     if dados_visao.get("curva_90_literal_direita"):
         return _ajustar_direcao_para_chassi("direita", parametros)
-    if dados_visao.get("confianca_curva_90", 0.0) < parametros.limiar_confianca_curva_90_execucao:
+
+    memoria_esquerda = bool(dados_visao.get("curva_90_memoria_esquerda"))
+    memoria_direita = bool(dados_visao.get("curva_90_memoria_direita"))
+    memoria_ativa = memoria_esquerda or memoria_direita
+    pista_de_risco = bool(
+        dados_visao.get("linha_toca_borda_esquerda")
+        or dados_visao.get("linha_toca_borda_direita")
+        or dados_visao.get("tempo_sem_linha", 0.0) > 0.0
+        or dados_visao["confianca_linha"] < (parametros.limiar_confianca_curva_90_execucao + 0.05)
+    )
+
+    if dados_visao["confianca_linha"] < parametros.limiar_confianca_curva_90_execucao:
+        if memoria_ativa and pista_de_risco:
+            if memoria_esquerda:
+                return _ajustar_direcao_para_chassi("esquerda", parametros)
+            if memoria_direita:
+                return _ajustar_direcao_para_chassi("direita", parametros)
+        return None
+
+    confianca_curva_90 = max(
+        float(dados_visao.get("confianca_curva_90", 0.0)),
+        float(dados_visao.get("confianca_curva_90_memoria", 0.0)) if pista_de_risco else 0.0,
+    )
+    if confianca_curva_90 < parametros.limiar_confianca_curva_90_execucao:
         return None
     if dados_visao.get("curva_90_esquerda"):
         return _ajustar_direcao_para_chassi("esquerda", parametros)
     if dados_visao.get("curva_90_direita"):
+        return _ajustar_direcao_para_chassi("direita", parametros)
+    if memoria_esquerda and pista_de_risco:
+        return _ajustar_direcao_para_chassi("esquerda", parametros)
+    if memoria_direita and pista_de_risco:
         return _ajustar_direcao_para_chassi("direita", parametros)
     return None
 
@@ -475,6 +740,13 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
         confianca_lookahead,
         parametros,
     )
+    forcar_pivo = _deve_forcar_pivo_curva_fechada(
+        erro_controle,
+        erro_lookahead,
+        confianca_lookahead,
+        dados_visao,
+        parametros,
+    )
     ganho_correcao, proporcao_curva = _ganho_correcao_dinamico(erro_referencia_curva, parametros)
 
     if erro_abs <= parametros.limiar_erro_centralizado:
@@ -490,19 +762,11 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
     correcao_pid = _limitar(correcao_pid, -parametros.correcao_maxima, parametros.correcao_maxima)
     correcao_pid *= ganho_correcao
 
-    if erro_referencia_curva >= parametros.limiar_erro_pivo:
-        velocidade_pivo = _limitar(
-            parametros.velocidade_pivo + parametros.bonus_velocidade_pivo,
-            parametros.velocidade_minima,
-            parametros.velocidade_maxima,
-        )
+    if forcar_pivo or erro_referencia_curva >= parametros.limiar_erro_pivo:
         if erro_controle >= 0.0:
-            return _criar_acao_diferencial(velocidade_pivo, -velocidade_pivo), correcao_pid, erro_controle
-        velocidade_esquerda, velocidade_direita = _compensar_re_esquerda(
-            -velocidade_pivo,
-            velocidade_pivo,
-            parametros,
-        )
+            velocidade_esquerda, velocidade_direita = _obter_pivo_direita_fixo(parametros)
+            return _criar_acao_diferencial(velocidade_esquerda, velocidade_direita), correcao_pid, erro_controle
+        velocidade_esquerda, velocidade_direita = _obter_pivo_esquerda_fixo(parametros)
         return _criar_acao_diferencial(velocidade_esquerda, velocidade_direita), correcao_pid, erro_controle
 
     velocidade_cruzeiro = _interpolar(
@@ -589,17 +853,42 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
         estado_controle.manobra_ativa = None
         estado_controle.manobra_ativa_ate = 0.0
 
-    linha_valida = bool(
-        dados_visao["linha_encontrada"]
-        and dados_visao["confianca_linha"] >= parametros.limiar_confianca
-    )
+    _atualizar_memoria_linha(estado_controle, dados_visao, parametros, agora)
 
-    if not linha_valida:
-        if estado_controle.estado_atual != ESTADO_SEM_LINHA:
-            estado_controle.estado_atual = ESTADO_SEM_LINHA
+    linha_minima = _linha_minimamente_valida(dados_visao, parametros)
+    linha_em_risco = _linha_em_risco(dados_visao, parametros)
+    linha_confiavel = _linha_confiavel_para_retomada(dados_visao, parametros)
+    retomada_confirmada = (
+        estado_controle.quadros_confiaveis_consecutivos >= parametros.quadros_confirmacao_retomada
+    )
+    em_recuperacao = estado_controle.estado_atual in {ESTADO_SEM_LINHA, ESTADO_BUSCA, ESTADO_CONTENCAO}
+
+    if not linha_minima:
+        if estado_controle.estado_atual != ESTADO_BUSCA:
+            estado_controle.estado_atual = ESTADO_BUSCA
             estado_controle.tempo_entrada_estado = agora
         pid.reiniciar(suave=True)
-        return _criar_acao_parar(), "linha ausente ou confianca baixa", correcao_pid
+        acao_busca, motivo_busca = _calcular_acao_busca_sem_linha(
+            estado_controle,
+            dados_visao,
+            parametros,
+            agora,
+        )
+        return acao_busca, motivo_busca, correcao_pid
+
+    if linha_em_risco or (em_recuperacao and (not linha_confiavel or not retomada_confirmada)):
+        if estado_controle.estado_atual != ESTADO_CONTENCAO:
+            estado_controle.estado_atual = ESTADO_CONTENCAO
+            estado_controle.tempo_entrada_estado = agora
+        pid.reiniciar(suave=True)
+        acao_contencao, motivo_contencao, correcao_pid = _calcular_acao_contencao(
+            dados_visao,
+            estado_controle,
+            parametros,
+        )
+        if em_recuperacao and linha_confiavel and not retomada_confirmada:
+            motivo_contencao = "confirmando retomada antes de liberar velocidade normal"
+        return acao_contencao, motivo_contencao, correcao_pid
 
     direcao_curva_90 = _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora)
     if direcao_curva_90 is not None:
@@ -684,6 +973,12 @@ def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, co
             f"conf={dados_visao['confianca_linha']:.2f} "
             f"c90={dados_visao.get('confianca_curva_90', 0.0):.2f}"
         ),
+        (
+            "borda="
+            f"{'E' if dados_visao.get('linha_toca_borda_esquerda') else ('D' if dados_visao.get('linha_toca_borda_direita') else 'NAO')} "
+            f"sem_linha={dados_visao.get('tempo_sem_linha', 0.0):.2f}s "
+            f"ret={estado_controle.quadros_confiaveis_consecutivos}"
+        ),
         f"verde={'SIM' if dados_visao.get('verde_detectado') else 'NAO'} confV={dados_visao.get('confianca_verde', 0.0):.2f}",
         f"pid_p={pid.erro_proporcional:+.3f} pid_i={pid.erro_integral:+.3f} pid_d={pid.erro_derivativo:+.3f}",
         f"correcao_pid={correcao_pid:+.2f}",
@@ -721,6 +1016,12 @@ def _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid):
                 f"curva90={dados_visao.get('confianca_curva_90', 0.0):.2f}",
                 f"verde={'SIM' if dados_visao.get('verde_detectado') else 'NAO'}",
                 f"conf={dados_visao['confianca_linha']:.2f}",
+                (
+                    "borda="
+                    f"{'E' if dados_visao.get('linha_toca_borda_esquerda') else ('D' if dados_visao.get('linha_toca_borda_direita') else 'NAO')}"
+                ),
+                f"sem_linha={dados_visao.get('tempo_sem_linha', 0.0):.2f}s",
+                f"ret={estado_controle.quadros_confiaveis_consecutivos}",
                 f"pid={correcao_pid:+.2f}",
                 f"motivo={motivo}",
             ]
@@ -802,23 +1103,35 @@ def analisar_argumentos():
     analisador.add_argument("--area-minima-linha", type=int, default=320)
     analisador.add_argument("--suavizacao-erro", type=float, default=0.40)
     analisador.add_argument("--limiar-confianca", type=float, default=0.10)
+    analisador.add_argument(
+        "--limiar-confianca-cautela",
+        type=float,
+        default=0.22,
+        help="Abaixo deste valor o robo entra em contencao e reduz velocidade antes de perder a linha.",
+    )
+    analisador.add_argument(
+        "--limiar-confianca-retomada",
+        type=float,
+        default=0.30,
+        help="Confianca minima para considerar que a linha voltou de forma segura.",
+    )
     analisador.add_argument("--faixa-base-contorno", type=float, default=0.16)
     analisador.add_argument("--margem-lateral-descarte", type=float, default=0.10)
     analisador.add_argument("--lookahead-fracao", type=float, default=0.42)
     analisador.add_argument("--lookahead-minimo-pixels", type=int, default=18)
-    analisador.add_argument("--limiar-confianca-curva-90", type=float, default=0.22)
-    analisador.add_argument("--limiar-confianca-lookahead-curva-90", type=float, default=0.20)
-    analisador.add_argument("--limiar-erro-lookahead-curva-90", type=float, default=0.48)
-    analisador.add_argument("--limiar-delta-erro-curva-90", type=float, default=0.18)
-    analisador.add_argument("--limiar-erro-base-curva-90", type=float, default=0.22)
-    analisador.add_argument("--faixa-superior-curva-90", type=float, default=0.40)
+    analisador.add_argument("--limiar-confianca-curva-90", type=float, default=0.18)
+    analisador.add_argument("--limiar-confianca-lookahead-curva-90", type=float, default=0.14)
+    analisador.add_argument("--limiar-erro-lookahead-curva-90", type=float, default=0.36)
+    analisador.add_argument("--limiar-delta-erro-curva-90", type=float, default=0.10)
+    analisador.add_argument("--limiar-erro-base-curva-90", type=float, default=0.30)
+    analisador.add_argument("--faixa-superior-curva-90", type=float, default=0.48)
     analisador.add_argument("--faixa-inferior-curva-90", type=float, default=0.24)
     analisador.add_argument("--densidade-lateral-curva-90", type=float, default=0.16)
-    analisador.add_argument("--densidade-oposta-max-curva-90", type=float, default=0.05)
+    analisador.add_argument("--densidade-oposta-max-curva-90", type=float, default=0.08)
     analisador.add_argument("--densidade-base-centro-curva-90", type=float, default=0.10)
     analisador.add_argument("--largura-janela-branca-curva-90", type=float, default=0.16)
     analisador.add_argument("--largura-janela-lateral-curva-90", type=float, default=0.28)
-    analisador.add_argument("--densidade-frontal-max-curva-90", type=float, default=0.04)
+    analisador.add_argument("--densidade-frontal-max-curva-90", type=float, default=0.08)
     analisador.add_argument("--roi-verde", type=float, default=0.75)
     analisador.add_argument("--verde-h-min", type=int, default=35)
     analisador.add_argument("--verde-h-max", type=int, default=95)
@@ -849,53 +1162,145 @@ def analisar_argumentos():
     analisador.add_argument("--velocidade-minima-interna", type=int, default=12)
     analisador.add_argument("--velocidade-maxima", type=int, default=135)
     analisador.add_argument("--limiar-erro-centralizado", type=float, default=0.035)
-    analisador.add_argument("--limiar-erro-reversao", type=float, default=0.52)
+    analisador.add_argument("--limiar-erro-reversao", type=float, default=0.46)
     analisador.add_argument(
         "--limiar-erro-reversao-esquerda",
         type=float,
-        default=0.34,
+        default=0.28,
         help="Permite que a esquerda entre em re mais cedo para fechar curva quando esse lado tem mais dificuldade mecanica.",
     )
     analisador.add_argument(
         "--bonus-re-esquerda",
         type=float,
-        default=24.0,
+        default=34.0,
         help="Empurrao extra de PWM quando o lado esquerdo precisa entrar em re para fechar a curva.",
     )
     analisador.add_argument(
         "--piso-re-esquerda",
         type=int,
-        default=96,
+        default=122,
         help="PWM minimo absoluto para a esquerda quando esse lado estiver em re numa curva para a esquerda.",
     )
-    analisador.add_argument("--limiar-erro-pivo", type=float, default=0.74)
-    analisador.add_argument("--velocidade-pivo", type=int, default=98)
-    analisador.add_argument("--bonus-velocidade-pivo", type=int, default=10)
-    analisador.add_argument("--velocidade-giro-90", type=int, default=116)
-    analisador.add_argument("--velocidade-reversa-giro-90", type=int, default=104)
-    analisador.add_argument("--velocidade-giro-90-esquerda", type=int, default=132)
-    analisador.add_argument("--velocidade-reversa-giro-90-esquerda", type=int, default=146)
-    analisador.add_argument("--tempo-giro-90", type=float, default=0.40)
-    analisador.add_argument("--tempo-giro-90-esquerda", type=float, default=0.48)
+    analisador.add_argument(
+        "--limiar-erro-contencao",
+        type=float,
+        default=0.18,
+        help="Erro lateral que ativa a contencao preventiva antes da perda total da linha.",
+    )
+    analisador.add_argument(
+        "--limiar-erro-contencao-pivo",
+        type=float,
+        default=0.30,
+        help="Erro lateral que bloqueia avanco e força reenquadramento em pivo.",
+    )
+    analisador.add_argument(
+        "--ganho-lookahead-contencao",
+        type=float,
+        default=0.35,
+        help="Peso do lookahead durante a contencao preventiva.",
+    )
+    analisador.add_argument("--ganho-correcao-contencao", type=float, default=118.0)
+    analisador.add_argument("--velocidade-contencao", type=int, default=92)
+    analisador.add_argument("--velocidade-maxima-contencao", type=int, default=128)
+    analisador.add_argument("--velocidade-reversa-contencao", type=int, default=90)
+    analisador.add_argument("--velocidade-busca-linha", type=int, default=86)
+    analisador.add_argument("--velocidade-reversa-busca-linha", type=int, default=82)
+    analisador.add_argument(
+        "--tempo-memoria-busca",
+        type=float,
+        default=1.10,
+        help="Tempo maximo desde a ultima linha confiavel em que ainda vale a pena buscar sem avancar.",
+    )
+    analisador.add_argument(
+        "--tempo-maximo-busca-sem-linha",
+        type=float,
+        default=1.40,
+        help="Limite total de busca controlada antes de parar completamente.",
+    )
+    analisador.add_argument("--tempo-busca-mesmo-lado", type=float, default=0.35)
+    analisador.add_argument("--tempo-varredura-busca", type=float, default=0.28)
+    analisador.add_argument(
+        "--quadros-confirmacao-retomada",
+        type=int,
+        default=4,
+        help="Quantidade de quadros confiaveis seguidos antes de liberar a volta ao modo normal.",
+    )
+    analisador.add_argument("--limiar-erro-pivo", type=float, default=0.62)
+    analisador.add_argument("--velocidade-pivo", type=int, default=150)
+    analisador.add_argument("--bonus-velocidade-pivo", type=int, default=0)
+    analisador.add_argument(
+        "--limiar-erro-pivo-forcado",
+        type=float,
+        default=0.42,
+        help="Erro de controle a partir do qual a curva entra direto em pivo seco.",
+    )
+    analisador.add_argument(
+        "--limiar-confianca-lookahead-pivo-forcado",
+        type=float,
+        default=0.12,
+        help="Confianca minima do lookahead para acionar pivo forcado.",
+    )
+    analisador.add_argument(
+        "--limiar-erro-lookahead-pivo-forcado",
+        type=float,
+        default=0.28,
+        help="Erro do lookahead que aciona pivo forcado em curva muito fechada.",
+    )
+    analisador.add_argument(
+        "--limiar-erro-lookahead-borda-pivo",
+        type=float,
+        default=0.18,
+        help="Erro minimo do lookahead para forcar pivo quando a linha encostar na borda.",
+    )
+    analisador.add_argument(
+        "--velocidade-pivo-esquerda-frente",
+        type=int,
+        default=150,
+        help="PWM da direita para pivo no proprio eixo quando a curva for para a esquerda.",
+    )
+    analisador.add_argument(
+        "--velocidade-pivo-esquerda-reversa",
+        type=int,
+        default=210,
+        help="PWM de re da esquerda para pivo no proprio eixo quando a curva for para a esquerda.",
+    )
+    analisador.add_argument(
+        "--velocidade-pivo-direita-frente",
+        type=int,
+        default=150,
+        help="PWM da esquerda para pivo no proprio eixo quando a curva for para a direita.",
+    )
+    analisador.add_argument(
+        "--velocidade-pivo-direita-reversa",
+        type=int,
+        default=150,
+        help="PWM de re da direita para pivo no proprio eixo quando a curva for para a direita.",
+    )
+    analisador.add_argument("--velocidade-giro-90", type=int, default=144)
+    analisador.add_argument("--velocidade-reversa-giro-90", type=int, default=136)
+    analisador.add_argument("--velocidade-giro-90-esquerda", type=int, default=158)
+    analisador.add_argument("--velocidade-reversa-giro-90-esquerda", type=int, default=176)
+    analisador.add_argument("--tempo-giro-90", type=float, default=0.56)
+    analisador.add_argument("--tempo-giro-90-esquerda", type=float, default=0.62)
     analisador.add_argument("--tempo-minimo-giro-90", type=float, default=0.16)
-    analisador.add_argument("--cooldown-giro-90", type=float, default=0.90)
-    analisador.add_argument("--limiar-confianca-curva-90-execucao", type=float, default=0.28)
-    analisador.add_argument("--limiar-confianca-retomada-giro-90", type=float, default=0.32)
-    analisador.add_argument("--limiar-erro-retomada-giro-90", type=float, default=0.18)
-    analisador.add_argument("--limiar-erro-lookahead-retomada-giro-90", type=float, default=0.30)
-    analisador.add_argument("--velocidade-assistencia-curva", type=int, default=92)
-    analisador.add_argument("--velocidade-reversa-assistencia-curva", type=int, default=78)
-    analisador.add_argument("--tempo-assistencia-curva", type=float, default=0.12)
+    analisador.add_argument("--cooldown-giro-90", type=float, default=0.70)
+    analisador.add_argument("--limiar-confianca-curva-90-execucao", type=float, default=0.22)
+    analisador.add_argument("--limiar-confianca-retomada-giro-90", type=float, default=0.26)
+    analisador.add_argument("--limiar-erro-retomada-giro-90", type=float, default=0.22)
+    analisador.add_argument("--limiar-erro-lookahead-retomada-giro-90", type=float, default=0.34)
+    analisador.add_argument("--velocidade-assistencia-curva", type=int, default=112)
+    analisador.add_argument("--velocidade-reversa-assistencia-curva", type=int, default=102)
+    analisador.add_argument("--tempo-assistencia-curva", type=float, default=0.18)
     analisador.add_argument("--tempo-minimo-assistencia-curva", type=float, default=0.06)
-    analisador.add_argument("--cooldown-assistencia-curva", type=float, default=0.22)
-    analisador.add_argument("--limiar-confianca-assistencia-curva", type=float, default=0.28)
-    analisador.add_argument("--limiar-confianca-lookahead-assistencia-curva", type=float, default=0.20)
-    analisador.add_argument("--limiar-erro-lookahead-assistencia-curva", type=float, default=0.16)
-    analisador.add_argument("--limiar-erro-lookahead-assistencia-curva-oposta", type=float, default=0.28)
-    analisador.add_argument("--limiar-delta-erro-assistencia-curva", type=float, default=0.10)
-    analisador.add_argument("--limiar-confianca-retomada-assistencia-curva", type=float, default=0.24)
-    analisador.add_argument("--limiar-erro-retomada-assistencia-curva", type=float, default=0.12)
-    analisador.add_argument("--limiar-erro-lookahead-retomada-assistencia-curva", type=float, default=0.18)
+    analisador.add_argument("--cooldown-assistencia-curva", type=float, default=0.16)
+    analisador.add_argument("--limiar-confianca-assistencia-curva", type=float, default=0.22)
+    analisador.add_argument("--limiar-confianca-lookahead-assistencia-curva", type=float, default=0.14)
+    analisador.add_argument("--limiar-erro-lookahead-assistencia-curva", type=float, default=0.12)
+    analisador.add_argument("--limiar-erro-lookahead-assistencia-curva-oposta", type=float, default=0.22)
+    analisador.add_argument("--limiar-delta-erro-assistencia-curva", type=float, default=0.07)
+    analisador.add_argument("--limiar-confianca-retomada-assistencia-curva", type=float, default=0.20)
+    analisador.add_argument("--limiar-erro-retomada-assistencia-curva", type=float, default=0.14)
+    analisador.add_argument("--limiar-erro-lookahead-retomada-assistencia-curva", type=float, default=0.22)
     analisador.set_defaults(inverter_correcao=False)
     analisador.add_argument(
         "--inverter-correcao",
@@ -966,6 +1371,10 @@ def principal():
     parametros.velocidade_minima_interna = _limitar_pwm(parametros.velocidade_minima_interna)
     parametros.velocidade_maxima = _limitar_pwm(parametros.velocidade_maxima)
     parametros.velocidade_pivo = _limitar_pwm(parametros.velocidade_pivo)
+    parametros.velocidade_pivo_esquerda_frente = _limitar_pwm(parametros.velocidade_pivo_esquerda_frente)
+    parametros.velocidade_pivo_esquerda_reversa = _limitar_pwm(parametros.velocidade_pivo_esquerda_reversa)
+    parametros.velocidade_pivo_direita_frente = _limitar_pwm(parametros.velocidade_pivo_direita_frente)
+    parametros.velocidade_pivo_direita_reversa = _limitar_pwm(parametros.velocidade_pivo_direita_reversa)
     parametros.velocidade_giro_90 = _limitar_pwm(parametros.velocidade_giro_90)
     parametros.velocidade_reversa_giro_90 = _limitar_pwm(parametros.velocidade_reversa_giro_90)
     parametros.velocidade_giro_90_esquerda = _limitar_pwm(parametros.velocidade_giro_90_esquerda)
@@ -974,8 +1383,40 @@ def principal():
     )
     parametros.velocidade_assistencia_curva = _limitar_pwm(parametros.velocidade_assistencia_curva)
     parametros.velocidade_reversa_assistencia_curva = _limitar_pwm(parametros.velocidade_reversa_assistencia_curva)
+    parametros.velocidade_contencao = _limitar_pwm(parametros.velocidade_contencao)
+    parametros.velocidade_maxima_contencao = _limitar_pwm(parametros.velocidade_maxima_contencao)
+    parametros.velocidade_reversa_contencao = _limitar_pwm(parametros.velocidade_reversa_contencao)
+    parametros.velocidade_busca_linha = _limitar_pwm(parametros.velocidade_busca_linha)
+    parametros.velocidade_reversa_busca_linha = _limitar_pwm(parametros.velocidade_reversa_busca_linha)
     parametros.piso_re_esquerda = _limitar_pwm(parametros.piso_re_esquerda)
     parametros.bonus_re_esquerda = max(0.0, float(parametros.bonus_re_esquerda))
+    parametros.quadros_confirmacao_retomada = max(1, int(parametros.quadros_confirmacao_retomada))
+    parametros.tempo_memoria_busca = max(0.0, float(parametros.tempo_memoria_busca))
+    parametros.tempo_maximo_busca_sem_linha = max(0.0, float(parametros.tempo_maximo_busca_sem_linha))
+    parametros.tempo_busca_mesmo_lado = max(0.0, float(parametros.tempo_busca_mesmo_lado))
+    parametros.tempo_varredura_busca = max(0.05, float(parametros.tempo_varredura_busca))
+    parametros.ganho_lookahead_contencao = _limitar(float(parametros.ganho_lookahead_contencao), 0.0, 1.0)
+    parametros.ganho_correcao_contencao = max(0.0, float(parametros.ganho_correcao_contencao))
+    parametros.limiar_confianca_cautela = _limitar(float(parametros.limiar_confianca_cautela), 0.0, 1.0)
+    parametros.limiar_confianca_retomada = _limitar(float(parametros.limiar_confianca_retomada), 0.0, 1.0)
+    parametros.limiar_erro_contencao = _limitar(float(parametros.limiar_erro_contencao), 0.0, 1.0)
+    parametros.limiar_erro_contencao_pivo = _limitar(float(parametros.limiar_erro_contencao_pivo), 0.0, 1.0)
+    parametros.limiar_erro_pivo_forcado = _limitar(float(parametros.limiar_erro_pivo_forcado), 0.0, 1.0)
+    parametros.limiar_confianca_lookahead_pivo_forcado = _limitar(
+        float(parametros.limiar_confianca_lookahead_pivo_forcado),
+        0.0,
+        1.0,
+    )
+    parametros.limiar_erro_lookahead_pivo_forcado = _limitar(
+        float(parametros.limiar_erro_lookahead_pivo_forcado),
+        0.0,
+        1.0,
+    )
+    parametros.limiar_erro_lookahead_borda_pivo = _limitar(
+        float(parametros.limiar_erro_lookahead_borda_pivo),
+        0.0,
+        1.0,
+    )
 
     if parametros.velocidade_minima > parametros.velocidade_maxima:
         parametros.velocidade_minima, parametros.velocidade_maxima = (
@@ -995,6 +1436,53 @@ def principal():
             0,
             parametros.velocidade_maxima,
         )
+    )
+    parametros.velocidade_maxima_contencao = int(
+        _limitar(
+            parametros.velocidade_maxima_contencao,
+            0,
+            parametros.velocidade_maxima,
+        )
+    )
+    parametros.velocidade_contencao = int(
+        _limitar(
+            parametros.velocidade_contencao,
+            0,
+            max(parametros.velocidade_maxima_contencao, 1),
+        )
+    )
+    parametros.velocidade_reversa_contencao = int(
+        _limitar(
+            parametros.velocidade_reversa_contencao,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_busca_linha = int(
+        _limitar(
+            parametros.velocidade_busca_linha,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_reversa_busca_linha = int(
+        _limitar(
+            parametros.velocidade_reversa_busca_linha,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.limiar_confianca_cautela = max(
+        parametros.limiar_confianca,
+        parametros.limiar_confianca_cautela,
+    )
+    parametros.limiar_confianca_retomada = max(
+        parametros.limiar_confianca_cautela,
+        parametros.limiar_confianca_retomada,
+    )
+    parametros.limiar_erro_contencao_pivo = max(
+        parametros.limiar_erro_contencao,
+        parametros.limiar_erro_contencao_pivo,
     )
 
     configuracao_visao = criar_configuracao_visao(parametros)

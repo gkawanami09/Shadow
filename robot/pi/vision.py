@@ -22,19 +22,25 @@ class ConfiguracaoVisao:
     margem_lateral_descarte: float = 0.10
     lookahead_fracao: float = 0.42
     lookahead_minimo_pixels: int = 18
-    limiar_confianca_curva_90: float = 0.22
-    limiar_confianca_lookahead_curva_90: float = 0.20
-    limiar_erro_lookahead_curva_90: float = 0.48
-    limiar_delta_erro_curva_90: float = 0.18
-    limiar_erro_base_curva_90: float = 0.22
-    faixa_superior_curva_90: float = 0.40
+    limiar_confianca_curva_90: float = 0.18
+    limiar_confianca_lookahead_curva_90: float = 0.14
+    limiar_erro_lookahead_curva_90: float = 0.36
+    limiar_delta_erro_curva_90: float = 0.10
+    limiar_erro_base_curva_90: float = 0.30
+    faixa_superior_curva_90: float = 0.48
     faixa_inferior_curva_90: float = 0.24
     densidade_lateral_curva_90: float = 0.16
-    densidade_oposta_max_curva_90: float = 0.05
+    densidade_oposta_max_curva_90: float = 0.08
     densidade_base_centro_curva_90: float = 0.10
     largura_janela_branca_curva_90: float = 0.16
     largura_janela_lateral_curva_90: float = 0.28
-    densidade_frontal_max_curva_90: float = 0.04
+    densidade_frontal_max_curva_90: float = 0.08
+    limiar_deslocamento_topo_curva_90: float = 0.18
+    densidade_minima_topo_curva_90: float = 0.08
+    tempo_memoria_curva_90: float = 0.42
+    limiar_confianca_memoria_curva_90: float = 0.12
+    limiar_deslocamento_topo_memoria_curva_90: float = 0.12
+    densidade_minima_topo_memoria_curva_90: float = 0.05
     roi_verde: float = 0.75
     verde_h_min: int = 35
     verde_h_max: int = 95
@@ -49,6 +55,10 @@ class EstadoVisao:
     centro_x_anterior: float | None = None
     erro_suavizado_anterior: float = 0.0
     erro_lookahead_anterior: float = 0.0
+    instante_ultima_curva_90_esquerda: float = -999.0
+    instante_ultima_curva_90_direita: float = -999.0
+    confianca_memoria_curva_90_esquerda: float = 0.0
+    confianca_memoria_curva_90_direita: float = 0.0
 
 
 def _limitar(valor, minimo, maximo):
@@ -340,6 +350,35 @@ def _calcular_erro_lookahead(info_linha, mascara_linha, estado, configuracao):
     return erro_lookahead, confianca_lookahead, (int(round(centro_x_lookahead)), y_referencia)
 
 
+def _calcular_indicadores_laterais(info_linha, largura_roi, configuracao):
+    resultado_vazio = {
+        "linha_toca_borda_esquerda": False,
+        "linha_toca_borda_direita": False,
+        "centro_linha_normalizado": 0.0,
+        "largura_linha_relativa": 0.0,
+    }
+
+    if not info_linha["linha_encontrada"] or info_linha["caixa"] is None:
+        return resultado_vazio
+
+    x, _, largura_caixa, _ = info_linha["caixa"]
+    margem_lateral_pixels = max(
+        2,
+        int(round(largura_roi * float(configuracao.margem_lateral_descarte))),
+    )
+    limite_direito = max(0, largura_roi - margem_lateral_pixels)
+
+    centro_x = float(info_linha.get("centro_x", largura_roi / 2.0))
+    centro_normalizado = (centro_x - (largura_roi / 2.0)) / max(1.0, largura_roi / 2.0)
+
+    return {
+        "linha_toca_borda_esquerda": bool(int(x) <= margem_lateral_pixels),
+        "linha_toca_borda_direita": bool(int(x + largura_caixa) >= limite_direito),
+        "centro_linha_normalizado": float(_limitar(centro_normalizado, -1.0, 1.0)),
+        "largura_linha_relativa": float(largura_caixa / max(1.0, largura_roi)),
+    }
+
+
 def _densidade_faixa(mascara, x_inicio, x_fim, y_inicio, y_fim):
     altura, largura = mascara.shape[:2]
     x_inicio = int(_limitar(x_inicio, 0, largura))
@@ -363,12 +402,31 @@ def _calcular_centro_x_base_contorno(mascara_contorno, configuracao):
     return float(np.mean(pontos_x.astype(np.float32)))
 
 
+def _calcular_centro_x_faixa(mascara, y_inicio, y_fim):
+    altura_roi, largura_roi = mascara.shape[:2]
+    y_inicio = int(_limitar(y_inicio, 0, altura_roi))
+    y_fim = int(_limitar(y_fim, 0, altura_roi))
+    if y_fim <= y_inicio:
+        return None, 0.0
+
+    recorte = mascara[y_inicio:y_fim, :]
+    pontos_y, pontos_x = np.where(recorte > 0)
+    if pontos_x.size == 0:
+        return None, 0.0
+
+    centro_x = float(np.mean(pontos_x.astype(np.float32)))
+    densidade = float(pontos_x.size) / float(max(1, recorte.size))
+    return centro_x, densidade
+
+
 def _detectar_cotovelo_90_branco(info_linha, mascara_contorno, configuracao):
     resultado_vazio = {
         "curva_90_literal_esquerda": False,
         "curva_90_literal_direita": False,
         "frente_branca_curva_90": False,
         "confianca_curva_90_literal": 0.0,
+        "deslocamento_topo_curva_90": 0.0,
+        "densidade_topo_curva_90": 0.0,
     }
 
     if info_linha["contorno"] is None:
@@ -420,20 +478,55 @@ def _detectar_cotovelo_90_branco(info_linha, mascara_contorno, configuracao):
         0,
         y_faixa_superior,
     )
+    centro_topo, dens_topo_total = _calcular_centro_x_faixa(
+        mascara_contorno,
+        0,
+        y_faixa_superior,
+    )
+    if centro_topo is None:
+        deslocamento_topo = 0.0
+    else:
+        deslocamento_topo = (centro_topo - centro_x_base) / max(1.0, largura_roi / 2.0)
+    deslocamento_topo = float(_limitar(deslocamento_topo, -1.0, 1.0))
 
     frente_branca = dens_frente <= float(configuracao.densidade_frontal_max_curva_90)
     coluna_base_valida = dens_coluna_base >= float(configuracao.densidade_base_centro_curva_90)
+    topo_deslocado_esquerda = bool(
+        dens_topo_total >= float(configuracao.densidade_minima_topo_curva_90)
+        and deslocamento_topo <= -float(configuracao.limiar_deslocamento_topo_curva_90)
+    )
+    topo_deslocado_direita = bool(
+        dens_topo_total >= float(configuracao.densidade_minima_topo_curva_90)
+        and deslocamento_topo >= float(configuracao.limiar_deslocamento_topo_curva_90)
+    )
+    frente_aceitavel = bool(
+        frente_branca
+        or (
+            dens_frente
+            <= max(
+                float(configuracao.densidade_frontal_max_curva_90) * 2.0,
+                float(configuracao.densidade_lateral_curva_90) * 0.65,
+            )
+            and (topo_deslocado_esquerda or topo_deslocado_direita)
+        )
+    )
 
     curva_90_literal_esquerda = bool(
-        frente_branca
+        frente_aceitavel
         and coluna_base_valida
-        and dens_top_left_proximo >= float(configuracao.densidade_lateral_curva_90)
+        and (
+            dens_top_left_proximo >= float(configuracao.densidade_lateral_curva_90)
+            or topo_deslocado_esquerda
+        )
         and dens_top_right_proximo <= float(configuracao.densidade_oposta_max_curva_90)
     )
     curva_90_literal_direita = bool(
-        frente_branca
+        frente_aceitavel
         and coluna_base_valida
-        and dens_top_right_proximo >= float(configuracao.densidade_lateral_curva_90)
+        and (
+            dens_top_right_proximo >= float(configuracao.densidade_lateral_curva_90)
+            or topo_deslocado_direita
+        )
         and dens_top_left_proximo <= float(configuracao.densidade_oposta_max_curva_90)
     )
 
@@ -442,22 +535,26 @@ def _detectar_cotovelo_90_branco(info_linha, mascara_contorno, configuracao):
         confianca_literal = min(
             1.0,
             dens_top_left_proximo
-            + (1.0 - dens_frente) * 0.40
+            + abs(min(0.0, deslocamento_topo)) * 0.45
+            + (1.0 - dens_frente) * 0.30
             + dens_coluna_base * 0.35,
         )
     elif curva_90_literal_direita:
         confianca_literal = min(
             1.0,
             dens_top_right_proximo
-            + (1.0 - dens_frente) * 0.40
+            + max(0.0, deslocamento_topo) * 0.45
+            + (1.0 - dens_frente) * 0.30
             + dens_coluna_base * 0.35,
         )
 
     return {
         "curva_90_literal_esquerda": curva_90_literal_esquerda,
         "curva_90_literal_direita": curva_90_literal_direita,
-        "frente_branca_curva_90": frente_branca and coluna_base_valida,
+        "frente_branca_curva_90": frente_aceitavel and coluna_base_valida,
         "confianca_curva_90_literal": float(confianca_literal),
+        "deslocamento_topo_curva_90": deslocamento_topo,
+        "densidade_topo_curva_90": float(dens_topo_total),
     }
 
 
@@ -470,6 +567,8 @@ def _detectar_curva_90(info_linha, mascara_linha, erro_lookahead, confianca_look
         "curva_90_literal_direita": False,
         "frente_branca_curva_90": False,
         "confianca_curva_90_literal": 0.0,
+        "deslocamento_topo_curva_90": 0.0,
+        "densidade_topo_curva_90": 0.0,
     }
 
     if not info_linha["linha_encontrada"] or info_linha["contorno"] is None:
@@ -561,6 +660,71 @@ def _detectar_curva_90(info_linha, mascara_linha, erro_lookahead, confianca_look
         "curva_90_literal_direita": deteccao_literal["curva_90_literal_direita"],
         "frente_branca_curva_90": deteccao_literal["frente_branca_curva_90"],
         "confianca_curva_90_literal": deteccao_literal["confianca_curva_90_literal"],
+        "deslocamento_topo_curva_90": deteccao_literal["deslocamento_topo_curva_90"],
+        "densidade_topo_curva_90": deteccao_literal["densidade_topo_curva_90"],
+    }
+
+
+def _atualizar_memoria_curva_90(info_linha, deteccao_curva_90, estado, configuracao, tempo_atual):
+    confianca_linha = float(info_linha.get("confianca", 0.0))
+    deslocamento_topo = float(deteccao_curva_90.get("deslocamento_topo_curva_90", 0.0))
+    densidade_topo = float(deteccao_curva_90.get("densidade_topo_curva_90", 0.0))
+    confianca_curva = float(deteccao_curva_90.get("confianca_curva_90", 0.0))
+
+    hint_esquerda = bool(
+        deteccao_curva_90.get("curva_90_esquerda")
+        or (
+            deslocamento_topo <= -float(configuracao.limiar_deslocamento_topo_memoria_curva_90)
+            and densidade_topo >= float(configuracao.densidade_minima_topo_memoria_curva_90)
+            and confianca_linha >= max(0.08, float(configuracao.limiar_confianca) * 0.8)
+        )
+    )
+    hint_direita = bool(
+        deteccao_curva_90.get("curva_90_direita")
+        or (
+            deslocamento_topo >= float(configuracao.limiar_deslocamento_topo_memoria_curva_90)
+            and densidade_topo >= float(configuracao.densidade_minima_topo_memoria_curva_90)
+            and confianca_linha >= max(0.08, float(configuracao.limiar_confianca) * 0.8)
+        )
+    )
+
+    confianca_hint = max(
+        confianca_curva,
+        min(1.0, abs(deslocamento_topo) * 1.8 + densidade_topo * 1.4 + confianca_linha * 0.3),
+    )
+
+    if hint_esquerda:
+        estado.instante_ultima_curva_90_esquerda = tempo_atual
+        estado.confianca_memoria_curva_90_esquerda = confianca_hint
+    if hint_direita:
+        estado.instante_ultima_curva_90_direita = tempo_atual
+        estado.confianca_memoria_curva_90_direita = confianca_hint
+
+    memoria_ativa_esquerda = (
+        (tempo_atual - estado.instante_ultima_curva_90_esquerda) <= float(configuracao.tempo_memoria_curva_90)
+        and estado.confianca_memoria_curva_90_esquerda >= float(configuracao.limiar_confianca_memoria_curva_90)
+    )
+    memoria_ativa_direita = (
+        (tempo_atual - estado.instante_ultima_curva_90_direita) <= float(configuracao.tempo_memoria_curva_90)
+        and estado.confianca_memoria_curva_90_direita >= float(configuracao.limiar_confianca_memoria_curva_90)
+    )
+
+    if memoria_ativa_esquerda and memoria_ativa_direita:
+        if estado.instante_ultima_curva_90_esquerda >= estado.instante_ultima_curva_90_direita:
+            memoria_ativa_direita = False
+        else:
+            memoria_ativa_esquerda = False
+
+    confianca_memoria = 0.0
+    if memoria_ativa_esquerda:
+        confianca_memoria = float(estado.confianca_memoria_curva_90_esquerda)
+    elif memoria_ativa_direita:
+        confianca_memoria = float(estado.confianca_memoria_curva_90_direita)
+
+    return {
+        "curva_90_memoria_esquerda": bool(memoria_ativa_esquerda),
+        "curva_90_memoria_direita": bool(memoria_ativa_direita),
+        "confianca_curva_90_memoria": float(_limitar(confianca_memoria, 0.0, 1.0)),
     }
 
 
@@ -660,6 +824,18 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
         confianca_lookahead,
         configuracao,
     )
+    memoria_curva_90 = _atualizar_memoria_curva_90(
+        info_linha,
+        deteccao_curva_90,
+        estado,
+        configuracao,
+        tempo_atual,
+    )
+    indicadores_laterais = _calcular_indicadores_laterais(
+        info_linha,
+        mascara_linha.shape[1],
+        configuracao,
+    )
     deteccao_verde = _detectar_verde(quadro_bgr, configuracao)
 
     if info_linha["linha_encontrada"]:
@@ -726,6 +902,20 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
             f" conf90={deteccao_curva_90['confianca_curva_90']:.2f}"
         ),
         (
+            f"topo90={deteccao_curva_90.get('deslocamento_topo_curva_90', 0.0):+.2f} "
+            f"densTopo={deteccao_curva_90.get('densidade_topo_curva_90', 0.0):.2f}"
+        ),
+        (
+            "mem90="
+            f"{'E' if memoria_curva_90['curva_90_memoria_esquerda'] else ('D' if memoria_curva_90['curva_90_memoria_direita'] else 'NAO')}"
+            f" confM={memoria_curva_90['confianca_curva_90_memoria']:.2f}"
+        ),
+        (
+            "borda="
+            f"{'E' if indicadores_laterais['linha_toca_borda_esquerda'] else ('D' if indicadores_laterais['linha_toca_borda_direita'] else 'NAO')}"
+            f" largura={indicadores_laterais['largura_linha_relativa']:.2f}"
+        ),
+        (
             "verde="
             f"{'SIM' if deteccao_verde['verde_detectado'] else 'NAO'} "
             f"confV={deteccao_verde['confianca_verde']:.2f} areaV={deteccao_verde['area_verde']:.0f}"
@@ -759,11 +949,20 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
         "curva_90_literal_direita": deteccao_curva_90["curva_90_literal_direita"],
         "frente_branca_curva_90": deteccao_curva_90["frente_branca_curva_90"],
         "confianca_curva_90_literal": deteccao_curva_90["confianca_curva_90_literal"],
+        "deslocamento_topo_curva_90": deteccao_curva_90["deslocamento_topo_curva_90"],
+        "densidade_topo_curva_90": deteccao_curva_90["densidade_topo_curva_90"],
+        "curva_90_memoria_esquerda": memoria_curva_90["curva_90_memoria_esquerda"],
+        "curva_90_memoria_direita": memoria_curva_90["curva_90_memoria_direita"],
+        "confianca_curva_90_memoria": memoria_curva_90["confianca_curva_90_memoria"],
         "verde_detectado": deteccao_verde["verde_detectado"],
         "confianca_verde": deteccao_verde["confianca_verde"],
         "area_verde": deteccao_verde["area_verde"],
         "confianca_linha": info_linha["confianca"],
         "linha_encontrada": info_linha["linha_encontrada"],
+        "linha_toca_borda_esquerda": indicadores_laterais["linha_toca_borda_esquerda"],
+        "linha_toca_borda_direita": indicadores_laterais["linha_toca_borda_direita"],
+        "centro_linha_normalizado": indicadores_laterais["centro_linha_normalizado"],
+        "largura_linha_relativa": indicadores_laterais["largura_linha_relativa"],
         "tempo_sem_linha": tempo_sem_linha,
         "quadro_debug": quadro_debug,
         "mascara_linha": mascara_linha,

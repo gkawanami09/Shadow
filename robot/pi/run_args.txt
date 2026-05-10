@@ -1,2 +1,9 @@
---roi 0.48
+--roi 0.52
+--lookahead-fracao 0.46
+--limiar-confianca 0.14
+--margem-lateral-descarte 0.12
+--suavizacao-erro 0.45
 --device 0
+--stream
+--stream-host 0.0.0.0
+--stream-port 8080
