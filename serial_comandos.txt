@@ -1,0 +1,32 @@
+COMANDOS SERIAIS - MOVIMENTOS (E NOMES REAIS NO PYTHON)
+
+FORMATO
+  <COMANDO>[,<VELOCIDADE>]
+  VELOCIDADE: 0-255 (opcional)
+
+COMANDOS BASE (USADOS PELA LOGICA DA VISAO)
+  S -> parar imediatamente
+  F -> seguir reto (frente)
+  L -> virar para a esquerda (giro curto)
+  R -> virar para a direita (giro curto)
+  U -> giro 180 (beco sem saida)
+  L90 -> giro programado de 90 graus para a esquerda
+  R90 -> giro programado de 90 graus para a direita
+
+NOMES REAIS NO PYTHON (robot/pi/serial_comm.py)
+  parar(ser) -> S
+  reto(ser, velocidade=None) -> F[,vel]
+  reto_forte(ser) -> F,255
+  virar_esquerda(ser, velocidade=None) -> L[,vel]
+  virar_direita(ser, velocidade=None) -> R[,vel]
+  corrigir_esquerda(ser, velocidade=None) -> L[,vel]
+  corrigir_direita(ser, velocidade=None) -> R[,vel]
+  beco(ser, velocidade=None) -> U[,vel]
+  giro_180(ser, velocidade=None) -> U[,vel]
+  giro_90_esquerda(ser, velocidade=None) -> L90[,vel]
+  giro_90_direita(ser, velocidade=None) -> R90[,vel]
+  parar_vermelho(ser) -> S (tempo controlado na Raspberry)
+
+OBSERVACOES
+  - A logica atual manda U durante o giro de 180.
+  - Em GAP, a logica repete o ultimo comando de movimento (F/L/R).
