@@ -41,12 +41,32 @@ class ConfiguracaoVisao:
     limiar_confianca_memoria_curva_90: float = 0.12
     limiar_deslocamento_topo_memoria_curva_90: float = 0.12
     densidade_minima_topo_memoria_curva_90: float = 0.05
+    largura_minima_intersecao_relativa: float = 0.42
+    densidade_lateral_minima_intersecao: float = 0.14
+    densidade_centro_minima_intersecao: float = 0.08
+    densidade_frontal_minima_intersecao: float = 0.06
+    limiar_confianca_intersecao: float = 0.55
+    usar_limiar_contextual: bool = True
+    fracao_topo_contextual: float = 0.40
+    ajuste_limiar_topo_contextual: int = 18
+    ajuste_limiar_base_contextual: int = 8
+    ajuste_limiar_topo_escuro: int = 22
+    limiar_densidade_topo_escuro: float = 0.38
+    margem_melhoria_densidade_topo: float = 0.08
+    faixa_contato_base_temporal: float = 0.26
+    peso_distancia_x_temporal: float = 1.0
+    peso_distancia_y_temporal: float = 0.30
+    intervalo_similaridade_quadros: int = 6
     roi_verde: float = 0.75
     verde_h_min: int = 35
     verde_h_max: int = 95
     verde_s_min: int = 60
     verde_v_min: int = 45
     area_minima_verde: int = 180
+    area_minima_verde_lateral: int = 110
+    margem_central_verde: float = 0.10
+    limiar_confianca_verde_lateral: float = 0.10
+    detectar_verde: bool = True
 
 
 @dataclass
@@ -59,6 +79,10 @@ class EstadoVisao:
     instante_ultima_curva_90_direita: float = -999.0
     confianca_memoria_curva_90_esquerda: float = 0.0
     confianca_memoria_curva_90_direita: float = 0.0
+    centro_y_anterior: float | None = None
+    mascara_referencia: np.ndarray | None = None
+    similaridade_linha_anterior: float = 0.0
+    contador_quadros: int = 0
 
 
 def _limitar(valor, minimo, maximo):
@@ -73,13 +97,35 @@ def _obter_limites_roi(formato_quadro, fracao_roi):
     return y_inicio, altura_total, largura_total
 
 
-def _gerar_mascara_linha(quadro_roi_bgr, limiar_binario, inverter_linha):
+def _aplicar_limiar(quadro_suave, limiar, inverter_linha):
+    modo_limiar = cv2.THRESH_BINARY if inverter_linha else cv2.THRESH_BINARY_INV
+    _, mascara_linha = cv2.threshold(
+        quadro_suave,
+        int(_limitar(limiar, 0, 255)),
+        255,
+        modo_limiar,
+    )
+    return mascara_linha
+
+
+def _similaridade_mascaras_binarias(mascara_a, mascara_b):
+    if mascara_a is None or mascara_b is None:
+        return 0.0
+    if mascara_a.shape != mascara_b.shape:
+        return 0.0
+
+    diferenca = cv2.absdiff(mascara_a, mascara_b)
+    similaridade = 1.0 - (float(np.count_nonzero(diferenca)) / float(diferenca.size))
+    return float(_limitar(similaridade, 0.0, 1.0))
+
+
+def _gerar_mascara_linha(quadro_roi_bgr, limiar_binario, inverter_linha, configuracao):
     quadro_cinza = cv2.cvtColor(quadro_roi_bgr, cv2.COLOR_BGR2GRAY)
     quadro_suave = cv2.GaussianBlur(quadro_cinza, (5, 5), 0)
 
     modo_limiar = cv2.THRESH_BINARY if inverter_linha else cv2.THRESH_BINARY_INV
     if limiar_binario is None:
-        _, mascara_linha = cv2.threshold(
+        limiar_base, mascara_linha = cv2.threshold(
             quadro_suave,
             0,
             255,
@@ -87,15 +133,74 @@ def _gerar_mascara_linha(quadro_roi_bgr, limiar_binario, inverter_linha):
         )
         limiar_usado = "otsu"
     else:
-        _, mascara_linha = cv2.threshold(
-            quadro_suave,
-            int(limiar_binario),
-            255,
-            modo_limiar,
-        )
+        limiar_base = int(limiar_binario)
+        mascara_linha = _aplicar_limiar(quadro_suave, limiar_base, inverter_linha)
         limiar_usado = str(int(limiar_binario))
 
-    return mascara_linha, limiar_usado, quadro_suave
+    rampa_escura_detectada = False
+    if configuracao.usar_limiar_contextual:
+        altura_roi = quadro_suave.shape[0]
+        y_topo = int(_limitar(altura_roi * float(configuracao.fracao_topo_contextual), 1, altura_roi))
+
+        # Linha escura usa THRESH_BINARY_INV, linha clara usa THRESH_BINARY.
+        # O sinal abaixo mantém o ajuste "mais estrito no topo" para ambos os casos.
+        sentido_ajuste = 1 if inverter_linha else -1
+
+        limiar_topo = int(
+            _limitar(
+                limiar_base + (sentido_ajuste * int(configuracao.ajuste_limiar_topo_contextual)),
+                0,
+                255,
+            )
+        )
+        limiar_base_inferior = int(
+            _limitar(
+                limiar_base - (sentido_ajuste * int(configuracao.ajuste_limiar_base_contextual)),
+                0,
+                255,
+            )
+        )
+
+        mascara_topo = _aplicar_limiar(quadro_suave, limiar_topo, inverter_linha)
+        mascara_base_inferior = _aplicar_limiar(quadro_suave, limiar_base_inferior, inverter_linha)
+
+        mascara_contextual = mascara_base_inferior.copy()
+        mascara_contextual[:y_topo, :] = mascara_topo[:y_topo, :]
+
+        faixa_topo_escuro = max(1, int(altura_roi * 0.25))
+        densidade_topo = float(
+            np.count_nonzero(mascara_contextual[:faixa_topo_escuro, :])
+            / max(1, mascara_contextual[:faixa_topo_escuro, :].size)
+        )
+
+        if (
+            densidade_topo >= float(configuracao.limiar_densidade_topo_escuro)
+            and int(configuracao.ajuste_limiar_topo_escuro) > 0
+        ):
+            limiar_topo_escuro = int(
+                _limitar(
+                    limiar_topo + (sentido_ajuste * int(configuracao.ajuste_limiar_topo_escuro)),
+                    0,
+                    255,
+                )
+            )
+            mascara_topo_escuro = _aplicar_limiar(quadro_suave, limiar_topo_escuro, inverter_linha)
+            densidade_topo_escuro = float(
+                np.count_nonzero(mascara_topo_escuro[:faixa_topo_escuro, :])
+                / max(1, mascara_topo_escuro[:faixa_topo_escuro, :].size)
+            )
+
+            if (
+                densidade_topo_escuro
+                + float(configuracao.margem_melhoria_densidade_topo)
+                < densidade_topo
+            ):
+                mascara_contextual[:y_topo, :] = mascara_topo_escuro[:y_topo, :]
+                rampa_escura_detectada = True
+
+        mascara_linha = mascara_contextual
+
+    return mascara_linha, limiar_usado, quadro_suave, rampa_escura_detectada
 
 
 def _gerar_mascara_adaptativa(quadro_suave, configuracao):
@@ -145,8 +250,7 @@ def _selecionar_linha(mascara_linha, estado, configuracao):
     altura_roi, largura_roi = mascara_linha.shape[:2]
     contornos, _ = cv2.findContours(mascara_linha, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    melhor = None
-    melhor_pontuacao = -1.0
+    candidatos = []
 
     for contorno in contornos:
         area = float(cv2.contourArea(contorno))
@@ -197,9 +301,8 @@ def _selecionar_linha(mascara_linha, estado, configuracao):
             - penalidade_largura * 0.9
         )
 
-        if pontuacao > melhor_pontuacao:
-            melhor_pontuacao = pontuacao
-            melhor = {
+        candidatos.append(
+            {
                 "contorno": contorno,
                 "area": area,
                 "centro_x": centro_x,
@@ -211,7 +314,67 @@ def _selecionar_linha(mascara_linha, estado, configuracao):
                 "proximidade_anterior": proximidade_anterior,
                 "ancoragem_base": ancoragem_base,
                 "penalidade_lateral": penalidade_lateral,
+                "pontuacao": pontuacao,
+                "base_y": y + altura_caixa,
             }
+        )
+
+    if not candidatos:
+        return {
+            "linha_encontrada": False,
+            "area": 0.0,
+            "erro_bruto": 0.0,
+            "erro_suavizado": estado.erro_suavizado_anterior,
+            "confianca": 0.0,
+            "centro_x": None,
+            "centro_y": None,
+            "caixa": None,
+            "largura_caixa": 0,
+            "altura_caixa": 0,
+            "contorno": None,
+            "proximidade_anterior": 0.0,
+            "pontuacao": -1.0,
+        }
+
+    candidatos = sorted(candidatos, key=lambda item: item["pontuacao"], reverse=True)
+
+    faixa_contato_base = max(1, int(altura_roi * float(configuracao.faixa_contato_base_temporal)))
+    candidatos_na_base = [
+        candidato
+        for candidato in candidatos
+        if int(candidato["base_y"]) >= (altura_roi - faixa_contato_base)
+    ]
+
+    melhor = None
+    if len(candidatos_na_base) >= 2:
+        if estado.centro_x_anterior is None:
+            referencia_x = float(largura_roi / 2.0)
+            referencia_y = float(altura_roi)
+        else:
+            referencia_x = float(estado.centro_x_anterior)
+            referencia_y = float(
+                estado.centro_y_anterior
+                if estado.centro_y_anterior is not None
+                else altura_roi
+            )
+
+        peso_x = float(max(0.0, configuracao.peso_distancia_x_temporal))
+        peso_y = float(max(0.0, configuracao.peso_distancia_y_temporal))
+
+        def _score_temporal(candidato):
+            dist_x = abs(float(candidato["centro_x"]) - referencia_x)
+            dist_y = abs(float(candidato["base_y"]) - referencia_y)
+            distancia = (dist_x * peso_x) + (dist_y * peso_y)
+            return distancia - (float(candidato["pontuacao"]) * 8.0)
+
+        melhor = min(candidatos_na_base, key=_score_temporal)
+    else:
+        candidatos_ordenados_base = sorted(
+            candidatos,
+            key=lambda item: (item["base_y"], item["pontuacao"]),
+            reverse=True,
+        )
+        melhor = candidatos_ordenados_base[0]
 
     if melhor is None or melhor["area"] < configuracao.area_minima_linha:
         return {
@@ -267,7 +430,7 @@ def _selecionar_linha(mascara_linha, estado, configuracao):
         "altura_caixa": melhor["altura_caixa"],
         "contorno": melhor["contorno"],
         "proximidade_anterior": melhor["proximidade_anterior"],
-        "pontuacao": melhor_pontuacao,
+        "pontuacao": melhor["pontuacao"],
     }
 
 
@@ -665,6 +828,75 @@ def _detectar_curva_90(info_linha, mascara_linha, erro_lookahead, confianca_look
     }
 
 
+def _detectar_intersecao(info_linha, mascara_linha, configuracao):
+    resultado_vazio = {
+        "intersecao_detectada": False,
+        "confianca_intersecao": 0.0,
+        "densidade_intersecao_esquerda": 0.0,
+        "densidade_intersecao_direita": 0.0,
+        "densidade_intersecao_frontal": 0.0,
+    }
+
+    if not info_linha["linha_encontrada"] or info_linha["contorno"] is None or info_linha["caixa"] is None:
+        return resultado_vazio
+
+    altura_roi, largura_roi = mascara_linha.shape[:2]
+    mascara_contorno = np.zeros_like(mascara_linha)
+    cv2.drawContours(mascara_contorno, [info_linha["contorno"]], -1, 255, thickness=cv2.FILLED)
+
+    y_faixa_superior = int(altura_roi * float(configuracao.faixa_superior_curva_90))
+    y_faixa_inferior = int(altura_roi * (1.0 - float(configuracao.faixa_inferior_curva_90)))
+    terco = max(1, largura_roi // 3)
+
+    dens_top_left = _densidade_faixa(mascara_contorno, 0, terco, 0, y_faixa_superior)
+    dens_top_right = _densidade_faixa(mascara_contorno, largura_roi - terco, largura_roi, 0, y_faixa_superior)
+    dens_frente = _densidade_faixa(
+        mascara_contorno,
+        int(round((largura_roi * 0.5) - (terco * 0.45))),
+        int(round((largura_roi * 0.5) + (terco * 0.45))),
+        0,
+        y_faixa_superior,
+    )
+    dens_base_center = _densidade_faixa(
+        mascara_contorno,
+        terco,
+        largura_roi - terco,
+        y_faixa_inferior,
+        altura_roi,
+    )
+
+    largura_relativa = float(info_linha.get("largura_caixa", 0)) / max(1.0, float(largura_roi))
+    laterais_ativas = (
+        dens_top_left >= float(configuracao.densidade_lateral_minima_intersecao)
+        and dens_top_right >= float(configuracao.densidade_lateral_minima_intersecao)
+    )
+    centro_ativo = dens_base_center >= float(configuracao.densidade_centro_minima_intersecao)
+    frontal_ativo = dens_frente >= float(configuracao.densidade_frontal_minima_intersecao)
+    largura_compativel = largura_relativa >= float(configuracao.largura_minima_intersecao_relativa)
+
+    confianca = (
+        min(1.0, (dens_top_left + dens_top_right) * 1.8)
+        + min(1.0, dens_base_center * 2.4)
+        + min(1.0, dens_frente * 2.0)
+        + min(1.0, largura_relativa * 1.6)
+    ) / 4.0
+
+    intersecao_detectada = bool(
+        laterais_ativas
+        and centro_ativo
+        and (frontal_ativo or largura_compativel)
+        and confianca >= float(configuracao.limiar_confianca_intersecao)
+    )
+
+    return {
+        "intersecao_detectada": intersecao_detectada,
+        "confianca_intersecao": float(_limitar(confianca, 0.0, 1.0)),
+        "densidade_intersecao_esquerda": float(dens_top_left),
+        "densidade_intersecao_direita": float(dens_top_right),
+        "densidade_intersecao_frontal": float(dens_frente),
+    }
+
+
 def _atualizar_memoria_curva_90(info_linha, deteccao_curva_90, estado, configuracao, tempo_atual):
     confianca_linha = float(info_linha.get("confianca", 0.0))
     deslocamento_topo = float(deteccao_curva_90.get("deslocamento_topo_curva_90", 0.0))
@@ -745,24 +977,27 @@ def _detectar_verde(quadro_bgr, configuracao):
     mascara_verde = cv2.morphologyEx(mascara_verde, cv2.MORPH_CLOSE, nucleo, iterations=2)
 
     contornos, _ = cv2.findContours(mascara_verde, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    melhor = None
+    area_referencia = max(1.0, float(mascara_verde.shape[0] * mascara_verde.shape[1]))
 
+    candidatos = []
     for contorno in contornos:
         area = float(cv2.contourArea(contorno))
-        if area < configuracao.area_minima_verde:
+        if area < max(1.0, float(configuracao.area_minima_verde_lateral)):
             continue
 
         x, y, largura, altura = cv2.boundingRect(contorno)
-        pontuacao = area + (altura * largura * 0.15)
-        if melhor is None or pontuacao > melhor["pontuacao"]:
-            melhor = {
-                "pontuacao": pontuacao,
+        confianca = float(_limitar((area / area_referencia) / 0.08, 0.0, 1.0))
+        candidatos.append(
+            {
+                "pontuacao": area + (altura * largura * 0.15),
                 "area": area,
+                "confianca": confianca,
                 "caixa": (x, y + y_inicio, largura, altura),
                 "centro": (x + (largura / 2.0), y_inicio + y + (altura / 2.0)),
             }
+        )
 
-    if melhor is None:
+    if not candidatos:
         return {
             "verde_detectado": False,
             "confianca_verde": 0.0,
@@ -770,29 +1005,90 @@ def _detectar_verde(quadro_bgr, configuracao):
             "caixa_verde": None,
             "centro_verde": None,
             "faixa_verde": (y_inicio, y_fim, largura_quadro),
+            "verde_esquerda_detectado": False,
+            "verde_direita_detectado": False,
+            "verde_duplo_detectado": False,
+            "confianca_verde_esquerda": 0.0,
+            "confianca_verde_direita": 0.0,
+            "area_verde_esquerda": 0.0,
+            "area_verde_direita": 0.0,
+            "quantidade_marcadores_verde": 0,
         }
 
-    area_referencia = max(1.0, float(mascara_verde.shape[0] * mascara_verde.shape[1]))
-    confianca_verde = float(_limitar((melhor["area"] / area_referencia) / 0.08, 0.0, 1.0))
+    melhor = max(candidatos, key=lambda item: item["pontuacao"])
+
+    margem_centro_px = float(largura_quadro) * float(_limitar(configuracao.margem_central_verde, 0.02, 0.35))
+    limite_esquerda = (largura_quadro / 2.0) - margem_centro_px
+    limite_direita = (largura_quadro / 2.0) + margem_centro_px
+
+    confianca_esquerda = 0.0
+    confianca_direita = 0.0
+    area_esquerda = 0.0
+    area_direita = 0.0
+
+    for candidato in candidatos:
+        centro_x = float(candidato["centro"][0])
+        if centro_x <= limite_esquerda:
+            if candidato["confianca"] > confianca_esquerda:
+                confianca_esquerda = float(candidato["confianca"])
+                area_esquerda = float(candidato["area"])
+        elif centro_x >= limite_direita:
+            if candidato["confianca"] > confianca_direita:
+                confianca_direita = float(candidato["confianca"])
+                area_direita = float(candidato["area"])
+
+    limiar_verde_lateral = float(_limitar(configuracao.limiar_confianca_verde_lateral, 0.0, 1.0))
+    verde_esquerda = bool(confianca_esquerda >= limiar_verde_lateral)
+    verde_direita = bool(confianca_direita >= limiar_verde_lateral)
+
     return {
         "verde_detectado": True,
-        "confianca_verde": confianca_verde,
-        "area_verde": melhor["area"],
+        "confianca_verde": float(melhor["confianca"]),
+        "area_verde": float(melhor["area"]),
         "caixa_verde": melhor["caixa"],
         "centro_verde": melhor["centro"],
         "faixa_verde": (y_inicio, y_fim, largura_quadro),
+        "verde_esquerda_detectado": verde_esquerda,
+        "verde_direita_detectado": verde_direita,
+        "verde_duplo_detectado": bool(verde_esquerda and verde_direita),
+        "confianca_verde_esquerda": float(confianca_esquerda),
+        "confianca_verde_direita": float(confianca_direita),
+        "area_verde_esquerda": float(area_esquerda),
+        "area_verde_direita": float(area_direita),
+        "quantidade_marcadores_verde": int(len(candidatos)),
     }
 
 
-def analisar_quadro(quadro_bgr, configuracao, estado):
+def _resultado_verde_desativado(formato_quadro):
+    altura, largura = formato_quadro[:2]
+    return {
+        "verde_detectado": False,
+        "confianca_verde": 0.0,
+        "area_verde": 0.0,
+        "caixa_verde": None,
+        "centro_verde": None,
+        "faixa_verde": (0, altura, largura),
+        "verde_esquerda_detectado": False,
+        "verde_direita_detectado": False,
+        "verde_duplo_detectado": False,
+        "confianca_verde_esquerda": 0.0,
+        "confianca_verde_direita": 0.0,
+        "area_verde_esquerda": 0.0,
+        "area_verde_direita": 0.0,
+        "quantidade_marcadores_verde": 0,
+    }
+
+
+def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
     tempo_atual = time.monotonic()
     y_roi, y_fim, largura_quadro = _obter_limites_roi(quadro_bgr.shape, configuracao.roi)
 
-    quadro_roi_bgr = quadro_bgr[y_roi:y_fim].copy()
-    mascara_linha_crua, limiar_usado, quadro_suave = _gerar_mascara_linha(
+    quadro_roi_bgr = quadro_bgr[y_roi:y_fim]
+    mascara_linha_crua, limiar_usado, quadro_suave, rampa_escura_detectada = _gerar_mascara_linha(
         quadro_roi_bgr,
         configuracao.limiar_binario,
         configuracao.inverter_linha,
+        configuracao,
     )
     mascara_linha_base = _pos_processar_mascara_linha(mascara_linha_crua.copy())
     mascara_linha_refinada = _refinar_mascara_linha(
@@ -824,6 +1120,11 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
         confianca_lookahead,
         configuracao,
     )
+    deteccao_intersecao = _detectar_intersecao(
+        info_linha,
+        mascara_linha,
+        configuracao,
+    )
     memoria_curva_90 = _atualizar_memoria_curva_90(
         info_linha,
         deteccao_curva_90,
@@ -836,106 +1137,156 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
         mascara_linha.shape[1],
         configuracao,
     )
-    deteccao_verde = _detectar_verde(quadro_bgr, configuracao)
+    if configuracao.detectar_verde:
+        deteccao_verde = _detectar_verde(quadro_bgr, configuracao)
+    else:
+        deteccao_verde = _resultado_verde_desativado(quadro_bgr.shape)
+
+    direcao_verde = None
+    centro_verde_normalizado = 0.0
+    if deteccao_verde.get("verde_detectado") and deteccao_verde.get("centro_verde") is not None:
+        centro_verde_x = float(deteccao_verde["centro_verde"][0])
+        centro_verde_normalizado = float(
+            _limitar((centro_verde_x - (largura_quadro / 2.0)) / max(1.0, largura_quadro / 2.0), -1.0, 1.0)
+        )
+        direcao_verde = "direita" if centro_verde_normalizado > 0.0 else "esquerda"
+
+    similaridade_linha = 0.0
+    estado.contador_quadros += 1
+    if info_linha["linha_encontrada"]:
+        intervalo_similaridade = max(1, int(configuracao.intervalo_similaridade_quadros))
+        if estado.mascara_referencia is None:
+            estado.mascara_referencia = mascara_linha.copy()
+            similaridade_linha = 0.0
+        else:
+            if estado.contador_quadros % intervalo_similaridade == 0:
+                similaridade_linha = _similaridade_mascaras_binarias(
+                    mascara_linha,
+                    estado.mascara_referencia,
+                )
+                estado.mascara_referencia = mascara_linha.copy()
+            else:
+                similaridade_linha = float(estado.similaridade_linha_anterior)
+
+        estado.similaridade_linha_anterior = similaridade_linha
+    else:
+        estado.mascara_referencia = None
+        estado.similaridade_linha_anterior = 0.0
+        similaridade_linha = 0.0
 
     if info_linha["linha_encontrada"]:
         estado.tempo_ultima_linha = tempo_atual
         estado.centro_x_anterior = info_linha["centro_x"]
+        estado.centro_y_anterior = info_linha["caixa"][1] + info_linha["caixa"][3]
         estado.erro_suavizado_anterior = info_linha["erro_suavizado"]
         estado.erro_lookahead_anterior = erro_lookahead
 
     tempo_sem_linha = max(0.0, tempo_atual - estado.tempo_ultima_linha)
 
-    quadro_debug = quadro_bgr.copy()
-    cv2.rectangle(quadro_debug, (0, y_roi), (largura_quadro - 1, y_fim - 1), (255, 255, 0), 2)
+    quadro_debug = None
+    if gerar_debug:
+        quadro_debug = quadro_bgr.copy()
+        cv2.rectangle(quadro_debug, (0, y_roi), (largura_quadro - 1, y_fim - 1), (255, 255, 0), 2)
 
-    centro_quadro_x = largura_quadro // 2
-    cv2.line(quadro_debug, (centro_quadro_x, y_roi), (centro_quadro_x, y_fim), (255, 0, 0), 2)
+        centro_quadro_x = largura_quadro // 2
+        cv2.line(quadro_debug, (centro_quadro_x, y_roi), (centro_quadro_x, y_fim), (255, 0, 0), 2)
 
-    if info_linha["contorno"] is not None:
-        deslocamento = np.array([[[0, y_roi]]], dtype=np.int32)
-        contorno_deslocado = info_linha["contorno"] + deslocamento
-        cv2.drawContours(quadro_debug, [contorno_deslocado], -1, (0, 0, 255), 2)
+        if info_linha["contorno"] is not None:
+            deslocamento = np.array([[[0, y_roi]]], dtype=np.int32)
+            contorno_deslocado = info_linha["contorno"] + deslocamento
+            cv2.drawContours(quadro_debug, [contorno_deslocado], -1, (0, 0, 255), 2)
 
-    if info_linha["linha_encontrada"]:
-        centro_linha = (int(info_linha["centro_x"]), y_roi + int(info_linha["centro_y"]))
-        cv2.circle(quadro_debug, centro_linha, 7, (0, 165, 255), -1)
-        cv2.line(quadro_debug, (centro_quadro_x, centro_linha[1]), centro_linha, (0, 165, 255), 2)
+        if info_linha["linha_encontrada"]:
+            centro_linha = (int(info_linha["centro_x"]), y_roi + int(info_linha["centro_y"]))
+            cv2.circle(quadro_debug, centro_linha, 7, (0, 165, 255), -1)
+            cv2.line(quadro_debug, (centro_quadro_x, centro_linha[1]), centro_linha, (0, 165, 255), 2)
 
-    if ponto_lookahead is not None:
-        ponto_debug = (int(ponto_lookahead[0]), y_roi + int(ponto_lookahead[1]))
-        cv2.circle(quadro_debug, ponto_debug, 6, (0, 255, 0), -1)
-        cv2.line(quadro_debug, (centro_quadro_x, ponto_debug[1]), ponto_debug, (0, 255, 0), 2)
+        if ponto_lookahead is not None:
+            ponto_debug = (int(ponto_lookahead[0]), y_roi + int(ponto_lookahead[1]))
+            cv2.circle(quadro_debug, ponto_debug, 6, (0, 255, 0), -1)
+            cv2.line(quadro_debug, (centro_quadro_x, ponto_debug[1]), ponto_debug, (0, 255, 0), 2)
 
-    y_verde_inicio, y_verde_fim, _ = deteccao_verde["faixa_verde"]
-    cv2.rectangle(quadro_debug, (0, y_verde_inicio), (largura_quadro - 1, y_verde_fim - 1), (0, 96, 0), 1)
+        if configuracao.detectar_verde:
+            y_verde_inicio, y_verde_fim, _ = deteccao_verde["faixa_verde"]
+            cv2.rectangle(quadro_debug, (0, y_verde_inicio), (largura_quadro - 1, y_verde_fim - 1), (0, 96, 0), 1)
 
-    if deteccao_verde["caixa_verde"] is not None:
-        x_verde, y_verde, largura_verde, altura_verde = deteccao_verde["caixa_verde"]
-        cv2.rectangle(
-            quadro_debug,
-            (int(x_verde), int(y_verde)),
-            (int(x_verde + largura_verde), int(y_verde + altura_verde)),
-            (0, 255, 0),
-            2,
-        )
-        cv2.putText(
-            quadro_debug,
-            "VERDE",
-            (int(x_verde), max(18, int(y_verde) - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.60,
-            (0, 255, 0),
-            2,
-            cv2.LINE_AA,
-        )
+            if deteccao_verde["caixa_verde"] is not None:
+                x_verde, y_verde, largura_verde, altura_verde = deteccao_verde["caixa_verde"]
+                cv2.rectangle(
+                    quadro_debug,
+                    (int(x_verde), int(y_verde)),
+                    (int(x_verde + largura_verde), int(y_verde + altura_verde)),
+                    (0, 255, 0),
+                    2,
+                )
+                cv2.putText(
+                    quadro_debug,
+                    "VERDE",
+                    (int(x_verde), max(18, int(y_verde) - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.60,
+                    (0, 255, 0),
+                    2,
+                    cv2.LINE_AA,
+                )
 
-    textos = [
-        f"linha={'SIM' if info_linha['linha_encontrada'] else 'NAO'} conf={info_linha['confianca']:.2f}",
-        f"erro={info_linha['erro_suavizado']:+.3f} bruto={info_linha['erro_bruto']:+.3f}",
-        f"lookahead={erro_lookahead:+.3f} conf_la={confianca_lookahead:.2f}",
-        (
-            "90="
-            f"{'E' if deteccao_curva_90['curva_90_esquerda'] else ('D' if deteccao_curva_90['curva_90_direita'] else 'NAO')}"
-            f" lit={('E' if deteccao_curva_90['curva_90_literal_esquerda'] else ('D' if deteccao_curva_90['curva_90_literal_direita'] else 'NAO'))}"
-            f" branco={('SIM' if deteccao_curva_90['frente_branca_curva_90'] else 'NAO')}"
-            f" conf90={deteccao_curva_90['confianca_curva_90']:.2f}"
-        ),
-        (
-            f"topo90={deteccao_curva_90.get('deslocamento_topo_curva_90', 0.0):+.2f} "
-            f"densTopo={deteccao_curva_90.get('densidade_topo_curva_90', 0.0):.2f}"
-        ),
-        (
-            "mem90="
-            f"{'E' if memoria_curva_90['curva_90_memoria_esquerda'] else ('D' if memoria_curva_90['curva_90_memoria_direita'] else 'NAO')}"
-            f" confM={memoria_curva_90['confianca_curva_90_memoria']:.2f}"
-        ),
-        (
-            "borda="
-            f"{'E' if indicadores_laterais['linha_toca_borda_esquerda'] else ('D' if indicadores_laterais['linha_toca_borda_direita'] else 'NAO')}"
-            f" largura={indicadores_laterais['largura_linha_relativa']:.2f}"
-        ),
-        (
-            "verde="
-            f"{'SIM' if deteccao_verde['verde_detectado'] else 'NAO'} "
-            f"confV={deteccao_verde['confianca_verde']:.2f} areaV={deteccao_verde['area_verde']:.0f}"
-        ),
-        f"tempo_sem_linha={tempo_sem_linha:.2f}s",
-        f"limiar={limiar_usado} mascara={origem_mascara}",
-    ]
+        textos = [
+            f"linha={'SIM' if info_linha['linha_encontrada'] else 'NAO'} conf={info_linha['confianca']:.2f}",
+            f"erro={info_linha['erro_suavizado']:+.3f} bruto={info_linha['erro_bruto']:+.3f}",
+            f"lookahead={erro_lookahead:+.3f} conf_la={confianca_lookahead:.2f}",
+            (
+                "90="
+                f"{'E' if deteccao_curva_90['curva_90_esquerda'] else ('D' if deteccao_curva_90['curva_90_direita'] else 'NAO')}"
+                f" lit={('E' if deteccao_curva_90['curva_90_literal_esquerda'] else ('D' if deteccao_curva_90['curva_90_literal_direita'] else 'NAO'))}"
+                f" branco={('SIM' if deteccao_curva_90['frente_branca_curva_90'] else 'NAO')}"
+                f" conf90={deteccao_curva_90['confianca_curva_90']:.2f}"
+            ),
+            (
+                f"topo90={deteccao_curva_90.get('deslocamento_topo_curva_90', 0.0):+.2f} "
+                f"densTopo={deteccao_curva_90.get('densidade_topo_curva_90', 0.0):.2f}"
+            ),
+            (
+                "mem90="
+                f"{'E' if memoria_curva_90['curva_90_memoria_esquerda'] else ('D' if memoria_curva_90['curva_90_memoria_direita'] else 'NAO')}"
+                f" confM={memoria_curva_90['confianca_curva_90_memoria']:.2f}"
+            ),
+            (
+                "borda="
+                f"{'E' if indicadores_laterais['linha_toca_borda_esquerda'] else ('D' if indicadores_laterais['linha_toca_borda_direita'] else 'NAO')}"
+                f" largura={indicadores_laterais['largura_linha_relativa']:.2f}"
+            ),
+            (
+                "verde="
+                f"{'SIM' if deteccao_verde['verde_detectado'] else 'NAO'} "
+                f"E={('SIM' if deteccao_verde.get('verde_esquerda_detectado') else 'NAO')} "
+                f"D={('SIM' if deteccao_verde.get('verde_direita_detectado') else 'NAO')} "
+                f"confV={deteccao_verde['confianca_verde']:.2f} areaV={deteccao_verde['area_verde']:.0f}"
+            ),
+            (
+                f"sim={similaridade_linha:.3f} "
+                f"ctx={'escuro' if rampa_escura_detectada else 'normal'}"
+            ),
+            (
+                "int="
+                f"{'SIM' if deteccao_intersecao['intersecao_detectada'] else 'NAO'} "
+                f"confI={deteccao_intersecao['confianca_intersecao']:.2f}"
+            ),
+            f"tempo_sem_linha={tempo_sem_linha:.2f}s",
+            f"limiar={limiar_usado} mascara={origem_mascara}",
+        ]
 
-    for indice, texto in enumerate(textos):
-        y_texto = 24 + indice * 22
-        cv2.putText(
-            quadro_debug,
-            texto,
-            (10, y_texto),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.58,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        for indice, texto in enumerate(textos):
+            y_texto = 24 + indice * 22
+            cv2.putText(
+                quadro_debug,
+                texto,
+                (10, y_texto),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.58,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
 
     return {
         "erro_linha": info_linha["erro_suavizado"],
@@ -954,15 +1305,32 @@ def analisar_quadro(quadro_bgr, configuracao, estado):
         "curva_90_memoria_esquerda": memoria_curva_90["curva_90_memoria_esquerda"],
         "curva_90_memoria_direita": memoria_curva_90["curva_90_memoria_direita"],
         "confianca_curva_90_memoria": memoria_curva_90["confianca_curva_90_memoria"],
+        "intersecao_detectada": deteccao_intersecao["intersecao_detectada"],
+        "confianca_intersecao": deteccao_intersecao["confianca_intersecao"],
+        "densidade_intersecao_esquerda": deteccao_intersecao["densidade_intersecao_esquerda"],
+        "densidade_intersecao_direita": deteccao_intersecao["densidade_intersecao_direita"],
+        "densidade_intersecao_frontal": deteccao_intersecao["densidade_intersecao_frontal"],
         "verde_detectado": deteccao_verde["verde_detectado"],
         "confianca_verde": deteccao_verde["confianca_verde"],
         "area_verde": deteccao_verde["area_verde"],
+        "verde_esquerda_detectado": deteccao_verde["verde_esquerda_detectado"],
+        "verde_direita_detectado": deteccao_verde["verde_direita_detectado"],
+        "verde_duplo_detectado": deteccao_verde["verde_duplo_detectado"],
+        "confianca_verde_esquerda": deteccao_verde["confianca_verde_esquerda"],
+        "confianca_verde_direita": deteccao_verde["confianca_verde_direita"],
+        "area_verde_esquerda": deteccao_verde["area_verde_esquerda"],
+        "area_verde_direita": deteccao_verde["area_verde_direita"],
+        "quantidade_marcadores_verde": deteccao_verde["quantidade_marcadores_verde"],
+        "direcao_verde": direcao_verde,
+        "centro_verde_normalizado": centro_verde_normalizado,
         "confianca_linha": info_linha["confianca"],
         "linha_encontrada": info_linha["linha_encontrada"],
         "linha_toca_borda_esquerda": indicadores_laterais["linha_toca_borda_esquerda"],
         "linha_toca_borda_direita": indicadores_laterais["linha_toca_borda_direita"],
         "centro_linha_normalizado": indicadores_laterais["centro_linha_normalizado"],
         "largura_linha_relativa": indicadores_laterais["largura_linha_relativa"],
+        "similaridade_linha": similaridade_linha,
+        "rampa_escura_detectada": bool(rampa_escura_detectada),
         "tempo_sem_linha": tempo_sem_linha,
         "quadro_debug": quadro_debug,
         "mascara_linha": mascara_linha,
