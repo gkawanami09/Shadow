@@ -188,6 +188,7 @@ def principal():
 
     tem_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
     exibir_janela = parametros.show or (tem_display and not parametros.no_show)
+    gerar_debug_visual = bool(exibir_janela or parametros.stream or parametros.debug_path)
     servidor_stream = None
 
     try:
@@ -242,42 +243,50 @@ def principal():
                 print("Falha ao ler quadro da camera.", file=sys.stderr)
                 break
 
-            dados_visao = analisar_quadro(quadro_bgr, configuracao_visao, estado_visao)
+            dados_visao = analisar_quadro(
+                quadro_bgr,
+                configuracao_visao,
+                estado_visao,
+                gerar_debug=gerar_debug_visual,
+            )
             estado_visual = _inferir_estado_visual(dados_visao, parametros.limiar_confianca)
             quantidade_quadros += 1
 
-            quadro_debug = dados_visao["quadro_debug"].copy()
-            cv2.putText(
-                quadro_debug,
-                f"estado_visual={estado_visual}",
-                (12, quadro_debug.shape[0] - 15),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.62,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
+            quadro_debug = None
+            if gerar_debug_visual and dados_visao["quadro_debug"] is not None:
+                quadro_debug = dados_visao["quadro_debug"].copy()
+                cv2.putText(
+                    quadro_debug,
+                    f"estado_visual={estado_visual}",
+                    (12, quadro_debug.shape[0] - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.62,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
 
             agora = time.monotonic()
             if parametros.print_every <= 0 or (agora - instante_ultimo_log) >= parametros.print_every:
                 _imprimir_status(dados_visao, estado_visual)
                 instante_ultimo_log = agora
 
-            if parametros.debug_path and (
-                parametros.debug_write_interval <= 0
-                or (agora - instante_ultima_gravacao_debug) >= parametros.debug_write_interval
-            ):
-                cv2.imwrite(parametros.debug_path, quadro_debug)
-                instante_ultima_gravacao_debug = agora
+            if quadro_debug is not None:
+                if parametros.debug_path and (
+                    parametros.debug_write_interval <= 0
+                    or (agora - instante_ultima_gravacao_debug) >= parametros.debug_write_interval
+                ):
+                    cv2.imwrite(parametros.debug_path, quadro_debug)
+                    instante_ultima_gravacao_debug = agora
 
-            if servidor_stream is not None:
-                servidor_stream.atualizar_quadro(quadro_debug)
+                if servidor_stream is not None:
+                    servidor_stream.atualizar_quadro(quadro_debug)
 
-            if exibir_janela:
-                cv2.imshow("visao_debug", quadro_debug)
-                tecla = cv2.waitKey(1) & 0xFF
-                if tecla in (27, ord("q")):
-                    break
+                if exibir_janela:
+                    cv2.imshow("visao_debug", quadro_debug)
+                    tecla = cv2.waitKey(1) & 0xFF
+                    if tecla in (27, ord("q")):
+                        break
 
     except KeyboardInterrupt:
         pass
