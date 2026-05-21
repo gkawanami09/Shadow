@@ -24,8 +24,6 @@ from serial_comm import (
     abrir_serial,
     enviar_velocidades_diferenciais,
     fechar_serial,
-    giro_90_direita,
-    giro_90_esquerda,
     parar,
 )
 from stream import ServidorStream
@@ -39,6 +37,7 @@ ESTADO_CONTENCAO = "CONTENDO_LINHA"
 ESTADO_BUSCA = "BUSCANDO_LINHA"
 ESTADO_MANOBRA_90 = "EXECUTANDO_CURVA_90"
 ESTADO_ASSISTENCIA_CURVA = "ASSISTINDO_CURVA"
+ESTADO_INTERSECAO = "NAVEGANDO_INTERSECAO"
 
 
 @dataclass
@@ -55,6 +54,14 @@ class EstadoControle:
     ultima_direcao_confiavel: str | None = None
     instante_ultima_linha_confiavel: float = -999.0
     quadros_confiaveis_consecutivos: int = 0
+    instante_inicio_similaridade_alta: float = -999.0
+    instante_ultimo_destravamento: float = -999.0
+    indicios_curva_90_esquerda: int = 0
+    indicios_curva_90_direita: int = 0
+    indicios_intersecao: int = 0
+    indicios_verde_esquerda: int = 0
+    indicios_verde_direita: int = 0
+    instante_ultima_intersecao: float = -999.0
 
 
 class ControladorPID:
@@ -487,6 +494,61 @@ def _calcular_acao_contencao(dados_visao, estado_controle, parametros):
     )
 
 
+def _deve_destravar_por_similaridade(estado_controle, dados_visao, parametros, agora):
+    if not dados_visao["linha_encontrada"]:
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        return False
+    if bool(dados_visao.get("intersecao_detectada")):
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        return False
+    if float(dados_visao.get("confianca_curva_90", 0.0)) >= float(parametros.limiar_confianca_curva_90_execucao):
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        return False
+    if dados_visao["confianca_linha"] < float(parametros.limiar_confianca_cautela):
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        return False
+
+    if abs(float(dados_visao["erro_linha"])) > float(parametros.limiar_erro_similaridade_stuck):
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        return False
+
+    similaridade_linha = float(dados_visao.get("similaridade_linha", 0.0))
+    if similaridade_linha < float(parametros.limiar_similaridade_stuck):
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        return False
+
+    if (agora - estado_controle.instante_ultimo_destravamento) < float(parametros.cooldown_similaridade_stuck):
+        return False
+
+    if estado_controle.instante_inicio_similaridade_alta < 0.0:
+        estado_controle.instante_inicio_similaridade_alta = agora
+        return False
+
+    return (agora - estado_controle.instante_inicio_similaridade_alta) >= float(
+        parametros.tempo_similaridade_stuck
+    )
+
+
+def _criar_acao_destravamento(estado_controle, dados_visao, parametros):
+    erro_referencia = float(dados_visao.get("erro_lookahead", dados_visao["erro_linha"]))
+    direcao_destravar = _direcao_correcao_por_erro(
+        erro_referencia,
+        parametros,
+        fallback=estado_controle.ultima_direcao_confiavel,
+    )
+    if direcao_destravar not in {"esquerda", "direita"}:
+        direcao_destravar = "direita"
+
+    acao = _criar_acao_busca_linha(
+        direcao_destravar,
+        parametros.velocidade_destravamento_frente,
+        parametros.velocidade_destravamento_re,
+        parametros,
+    )
+    acao["modo"] = "destravamento"
+    return acao, direcao_destravar
+
+
 def _criar_acao_parar():
     return {"tipo": "S"}
 
@@ -515,6 +577,7 @@ def _criar_acao_giro_90(direcao, velocidade_frente, velocidade_reversa, parametr
 
     acao = _criar_acao_diferencial(velocidade_esquerda, velocidade_direita)
     acao["modo"] = "giro_90"
+    acao["direcao"] = direcao
     return acao
 
 
@@ -561,8 +624,6 @@ def _obter_parametros_giro_90(direcao, parametros):
 def _assinatura_acao(acao):
     if acao["tipo"] == "D":
         return ("D", acao["velocidade_esquerda"], acao["velocidade_direita"])
-    if acao["tipo"] in {"L90", "R90"}:
-        return (acao["tipo"], acao["velocidade"])
     return ("S",)
 
 
@@ -570,8 +631,6 @@ def _deve_enviar(estado_controle, acao, agora, intervalo_minimo):
     assinatura = _assinatura_acao(acao)
     if assinatura != estado_controle.assinatura_ultima_acao:
         return True
-    if acao["tipo"] in {"L90", "R90"}:
-        return False
     return (agora - estado_controle.instante_ultimo_envio) >= intervalo_minimo
 
 
@@ -587,28 +646,167 @@ def _enviar_acao_serial(ser, acao):
         )
         return
 
-    if acao["tipo"] == "L90":
-        giro_90_esquerda(ser, acao["velocidade"])
-        return
-
-    if acao["tipo"] == "R90":
-        giro_90_direita(ser, acao["velocidade"])
-        return
-
     parar(ser)
+
+
+def _zerar_indicios_curva_90(estado_controle):
+    estado_controle.indicios_curva_90_esquerda = 0
+    estado_controle.indicios_curva_90_direita = 0
+
+
+def _registrar_indicio_curva_90(estado_controle, direcao):
+    if direcao == "esquerda":
+        estado_controle.indicios_curva_90_esquerda = min(9, estado_controle.indicios_curva_90_esquerda + 1)
+        estado_controle.indicios_curva_90_direita = max(0, estado_controle.indicios_curva_90_direita - 1)
+    elif direcao == "direita":
+        estado_controle.indicios_curva_90_direita = min(9, estado_controle.indicios_curva_90_direita + 1)
+        estado_controle.indicios_curva_90_esquerda = max(0, estado_controle.indicios_curva_90_esquerda - 1)
+    else:
+        estado_controle.indicios_curva_90_esquerda = max(0, estado_controle.indicios_curva_90_esquerda - 1)
+        estado_controle.indicios_curva_90_direita = max(0, estado_controle.indicios_curva_90_direita - 1)
+
+
+def _criar_acao_retomada_pos_90(direcao, parametros):
+    direcao = direcao if direcao in {"esquerda", "direita"} else "direita"
+    acao = _criar_acao_busca_linha(
+        direcao,
+        parametros.velocidade_retomada_pos_90_frente,
+        parametros.velocidade_retomada_pos_90_re,
+        parametros,
+    )
+    acao["modo"] = "retomada_pos_90"
+    acao["direcao"] = direcao
+    return acao
+
+
+def _atualizar_indicios_intersecao(estado_controle, dados_visao, parametros):
+    intersecao_detectada = bool(dados_visao.get("intersecao_detectada"))
+    confianca_intersecao = float(dados_visao.get("confianca_intersecao", 0.0))
+    limiar_intersecao = float(parametros.limiar_confianca_intersecao_confirmacao)
+    intersecao_candidata = bool(intersecao_detectada and confianca_intersecao >= limiar_intersecao)
+
+    if intersecao_candidata:
+        estado_controle.indicios_intersecao = min(12, estado_controle.indicios_intersecao + 1)
+    else:
+        estado_controle.indicios_intersecao = max(0, estado_controle.indicios_intersecao - 1)
+
+    limiar_verde = float(parametros.limiar_confianca_verde_confirmacao)
+    verde_esquerda = bool(
+        dados_visao.get("verde_esquerda_detectado")
+        and float(dados_visao.get("confianca_verde_esquerda", 0.0)) >= limiar_verde
+    )
+    verde_direita = bool(
+        dados_visao.get("verde_direita_detectado")
+        and float(dados_visao.get("confianca_verde_direita", 0.0)) >= limiar_verde
+    )
+
+    if intersecao_candidata and verde_esquerda:
+        estado_controle.indicios_verde_esquerda = min(12, estado_controle.indicios_verde_esquerda + 1)
+    else:
+        estado_controle.indicios_verde_esquerda = max(0, estado_controle.indicios_verde_esquerda - 2)
+
+    if intersecao_candidata and verde_direita:
+        estado_controle.indicios_verde_direita = min(12, estado_controle.indicios_verde_direita + 1)
+    else:
+        estado_controle.indicios_verde_direita = max(0, estado_controle.indicios_verde_direita - 2)
+
+
+def _limpar_indicios_intersecao(estado_controle):
+    estado_controle.indicios_intersecao = 0
+    estado_controle.indicios_verde_esquerda = 0
+    estado_controle.indicios_verde_direita = 0
+
+
+def _decidir_direcao_intersecao(estado_controle, parametros):
+    limiar_verde = max(1, int(parametros.quadros_confirmacao_verde_intersecao))
+    esquerda = estado_controle.indicios_verde_esquerda >= limiar_verde
+    direita = estado_controle.indicios_verde_direita >= limiar_verde
+
+    if esquerda and direita:
+        return "retorno"
+    if esquerda:
+        return "esquerda"
+    if direita:
+        return "direita"
+    return "reto"
+
+
+def _criar_acao_reto_temporizada(velocidade, modo):
+    velocidade_pwm = _limitar_pwm(velocidade)
+    acao = _criar_acao_diferencial(velocidade_pwm, velocidade_pwm)
+    acao["modo"] = modo
+    return acao
+
+
+def _criar_acao_retorno_intersecao(parametros):
+    velocidade = _limitar_pwm(parametros.velocidade_retorno_intersecao)
+    acao = _criar_acao_diferencial(velocidade, -velocidade)
+    acao["modo"] = "intersecao_retorno"
+    acao["direcao"] = "retorno"
+    return acao
+
+
+def _iniciar_fluxo_intersecao(estado_controle, dados_visao, parametros, agora):
+    estado_controle.estado_atual = ESTADO_INTERSECAO
+    estado_controle.tempo_entrada_estado = agora
+
+    direcao_intersecao = _decidir_direcao_intersecao(estado_controle, parametros)
+    if direcao_intersecao in {"esquerda", "direita"}:
+        direcao_intersecao = _ajustar_direcao_para_chassi(direcao_intersecao, parametros)
+
+    estado_controle.manobra_ativa = _criar_acao_reto_temporizada(
+        parametros.velocidade_avanco_intersecao,
+        "intersecao_avanco",
+    )
+    estado_controle.manobra_ativa["direcao_intersecao"] = direcao_intersecao
+    estado_controle.manobra_ativa["verdeE"] = int(estado_controle.indicios_verde_esquerda)
+    estado_controle.manobra_ativa["verdeD"] = int(estado_controle.indicios_verde_direita)
+    estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_avanco_intersecao)
+    _limpar_indicios_intersecao(estado_controle)
+    return (
+        estado_controle.manobra_ativa,
+        f"intersecao confirmada ({direcao_intersecao}) - avancando para centralizar",
+    )
+
+
+def _deve_executar_intersecao(estado_controle, dados_visao, parametros, agora):
+    if (agora - estado_controle.instante_ultima_intersecao) < float(parametros.cooldown_intersecao):
+        return False
+    if not dados_visao.get("linha_encontrada"):
+        return False
+    if float(dados_visao.get("confianca_linha", 0.0)) < float(parametros.limiar_confianca_intersecao_execucao):
+        return False
+    if estado_controle.indicios_intersecao < max(1, int(parametros.quadros_confirmacao_intersecao)):
+        return False
+
+    # Se a leitura parece apenas curva de 90 sem confirmacao de intersecao, deixa
+    # o fluxo de curva tomar conta.
+    if (
+        float(dados_visao.get("confianca_curva_90", 0.0)) >= float(parametros.limiar_confianca_curva_90_execucao)
+        and not bool(dados_visao.get("intersecao_detectada"))
+    ):
+        return False
+
+    return True
 
 
 def _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora):
     if (agora - estado_controle.instante_ultimo_giro_90) < parametros.cooldown_giro_90:
+        _registrar_indicio_curva_90(estado_controle, None)
         return None
-    if dados_visao.get("curva_90_literal_esquerda"):
-        return _ajustar_direcao_para_chassi("esquerda", parametros)
-    if dados_visao.get("curva_90_literal_direita"):
-        return _ajustar_direcao_para_chassi("direita", parametros)
+
+    literal_esquerda = bool(dados_visao.get("curva_90_literal_esquerda"))
+    literal_direita = bool(dados_visao.get("curva_90_literal_direita"))
+    literal_ativo = bool(literal_esquerda ^ literal_direita)
 
     memoria_esquerda = bool(dados_visao.get("curva_90_memoria_esquerda"))
     memoria_direita = bool(dados_visao.get("curva_90_memoria_direita"))
     memoria_ativa = memoria_esquerda or memoria_direita
+    intersecao_detectada = bool(dados_visao.get("intersecao_detectada"))
+    confianca_intersecao = float(dados_visao.get("confianca_intersecao", 0.0))
+    verde_detectado = bool(dados_visao.get("verde_detectado"))
+    confianca_verde = float(dados_visao.get("confianca_verde", 0.0))
+
     pista_de_risco = bool(
         dados_visao.get("linha_toca_borda_esquerda")
         or dados_visao.get("linha_toca_borda_direita")
@@ -616,29 +814,66 @@ def _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora):
         or dados_visao["confianca_linha"] < (parametros.limiar_confianca_curva_90_execucao + 0.05)
     )
 
-    if dados_visao["confianca_linha"] < parametros.limiar_confianca_curva_90_execucao:
-        if memoria_ativa and pista_de_risco:
-            if memoria_esquerda:
-                return _ajustar_direcao_para_chassi("esquerda", parametros)
-            if memoria_direita:
-                return _ajustar_direcao_para_chassi("direita", parametros)
+    bloquear_por_intersecao = bool(
+        intersecao_detectada
+        and confianca_intersecao >= float(parametros.limiar_confianca_intersecao_bloqueio_90)
+        and not literal_ativo
+    )
+    bloquear_por_verde = bool(
+        verde_detectado
+        and confianca_verde >= float(parametros.limiar_confianca_verde_bloqueio_90)
+        and intersecao_detectada
+        and not literal_ativo
+    )
+    if bloquear_por_intersecao or bloquear_por_verde:
+        _registrar_indicio_curva_90(estado_controle, None)
         return None
 
-    confianca_curva_90 = max(
-        float(dados_visao.get("confianca_curva_90", 0.0)),
-        float(dados_visao.get("confianca_curva_90_memoria", 0.0)) if pista_de_risco else 0.0,
-    )
-    if confianca_curva_90 < parametros.limiar_confianca_curva_90_execucao:
+    direcao_candidata = None
+    if literal_ativo:
+        direcao_candidata = "esquerda" if literal_esquerda else "direita"
+    else:
+        confianca_curva_90 = max(
+            float(dados_visao.get("confianca_curva_90", 0.0)),
+            float(dados_visao.get("confianca_curva_90_memoria", 0.0)) if pista_de_risco else 0.0,
+        )
+        confianca_linha = float(dados_visao.get("confianca_linha", 0.0))
+
+        if confianca_linha < float(parametros.limiar_confianca_curva_90_execucao):
+            if memoria_ativa and pista_de_risco:
+                if memoria_esquerda:
+                    direcao_candidata = "esquerda"
+                elif memoria_direita:
+                    direcao_candidata = "direita"
+        elif confianca_curva_90 >= float(parametros.limiar_confianca_curva_90_execucao):
+            if dados_visao.get("curva_90_esquerda"):
+                direcao_candidata = "esquerda"
+            elif dados_visao.get("curva_90_direita"):
+                direcao_candidata = "direita"
+            elif memoria_esquerda and pista_de_risco:
+                direcao_candidata = "esquerda"
+            elif memoria_direita and pista_de_risco:
+                direcao_candidata = "direita"
+
+    if direcao_candidata is None:
+        _registrar_indicio_curva_90(estado_controle, None)
         return None
-    if dados_visao.get("curva_90_esquerda"):
-        return _ajustar_direcao_para_chassi("esquerda", parametros)
-    if dados_visao.get("curva_90_direita"):
-        return _ajustar_direcao_para_chassi("direita", parametros)
-    if memoria_esquerda and pista_de_risco:
-        return _ajustar_direcao_para_chassi("esquerda", parametros)
-    if memoria_direita and pista_de_risco:
-        return _ajustar_direcao_para_chassi("direita", parametros)
-    return None
+
+    direcao_candidata = _ajustar_direcao_para_chassi(direcao_candidata, parametros)
+    _registrar_indicio_curva_90(estado_controle, direcao_candidata)
+
+    quadros_necessarios = 1 if literal_ativo else max(1, int(parametros.quadros_confirmacao_curva_90))
+    if direcao_candidata == "esquerda":
+        if estado_controle.indicios_curva_90_esquerda < quadros_necessarios:
+            return None
+    elif direcao_candidata == "direita":
+        if estado_controle.indicios_curva_90_direita < quadros_necessarios:
+            return None
+    else:
+        return None
+
+    _zerar_indicios_curva_90(estado_controle)
+    return direcao_candidata
 
 
 def _deve_executar_assistencia_curva(estado_controle, dados_visao, parametros, agora):
@@ -829,6 +1064,7 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
             return _criar_acao_parar(), "espera de seguranca na partida", correcao_pid
         estado_controle.estado_atual = ESTADO_SEM_LINHA
         estado_controle.tempo_entrada_estado = agora
+        _zerar_indicios_curva_90(estado_controle)
 
     if estado_controle.manobra_ativa is not None and agora < estado_controle.manobra_ativa_ate:
         modo_manobra = estado_controle.manobra_ativa.get("modo")
@@ -846,14 +1082,120 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
                 pid.reiniciar(suave=True)
             else:
                 return estado_controle.manobra_ativa, "assistencia temporizada de curva", correcao_pid
+        elif modo_manobra == "retomada_pos_90":
+            if _linha_confiavel_para_retomada(dados_visao, parametros):
+                estado_controle.manobra_ativa = None
+                estado_controle.manobra_ativa_ate = 0.0
+                pid.reiniciar(suave=True)
+            else:
+                return estado_controle.manobra_ativa, "retomando linha apos curva de 90", correcao_pid
+        elif modo_manobra == "retomada_pos_intersecao":
+            if _linha_confiavel_para_retomada(dados_visao, parametros):
+                estado_controle.manobra_ativa = None
+                estado_controle.manobra_ativa_ate = 0.0
+                pid.reiniciar(suave=True)
+                _limpar_indicios_intersecao(estado_controle)
+            else:
+                return estado_controle.manobra_ativa, "retomando linha apos intersecao", correcao_pid
+        elif modo_manobra in {
+            "intersecao_avanco",
+            "intersecao_giro",
+            "intersecao_reto",
+            "intersecao_retorno",
+        }:
+            return estado_controle.manobra_ativa, "executando manobra de intersecao", correcao_pid
         else:
             return estado_controle.manobra_ativa, "manobra temporizada", correcao_pid
 
     if estado_controle.manobra_ativa is not None and agora >= estado_controle.manobra_ativa_ate:
+        manobra_encerrada = estado_controle.manobra_ativa
         estado_controle.manobra_ativa = None
         estado_controle.manobra_ativa_ate = 0.0
 
+        if manobra_encerrada is not None and manobra_encerrada.get("modo") == "intersecao_avanco":
+            direcao_intersecao = manobra_encerrada.get("direcao_intersecao", "reto")
+            if direcao_intersecao == "retorno":
+                estado_controle.manobra_ativa = _criar_acao_retorno_intersecao(parametros)
+                estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_retorno_intersecao)
+            elif direcao_intersecao in {"esquerda", "direita"}:
+                estado_controle.manobra_ativa = _criar_acao_giro_90(
+                    direcao_intersecao,
+                    parametros.velocidade_giro_intersecao_frente,
+                    parametros.velocidade_giro_intersecao_re,
+                    parametros,
+                )
+                estado_controle.manobra_ativa["modo"] = "intersecao_giro"
+                estado_controle.manobra_ativa["direcao"] = direcao_intersecao
+                estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_giro_intersecao)
+            else:
+                estado_controle.manobra_ativa = _criar_acao_reto_temporizada(
+                    parametros.velocidade_reto_intersecao,
+                    "intersecao_reto",
+                )
+                estado_controle.manobra_ativa["direcao"] = "reto"
+                estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_reto_intersecao)
+
+            pid.reiniciar(suave=False)
+            return estado_controle.manobra_ativa, f"intersecao: decisao {direcao_intersecao}", correcao_pid
+
+        if manobra_encerrada is not None and manobra_encerrada.get("modo") in {
+            "intersecao_giro",
+            "intersecao_reto",
+            "intersecao_retorno",
+        }:
+            _limpar_indicios_intersecao(estado_controle)
+            direcao_retomada = manobra_encerrada.get("direcao")
+            if direcao_retomada not in {"esquerda", "direita"}:
+                direcao_retomada = estado_controle.ultima_direcao_confiavel
+            if direcao_retomada not in {"esquerda", "direita"}:
+                direcao_retomada = "direita"
+
+            if float(parametros.tempo_retomada_pos_intersecao) > 0.0:
+                estado_controle.estado_atual = ESTADO_CONTENCAO
+                estado_controle.tempo_entrada_estado = agora
+                estado_controle.manobra_ativa = _criar_acao_busca_linha(
+                    direcao_retomada,
+                    parametros.velocidade_retomada_pos_intersecao_frente,
+                    parametros.velocidade_retomada_pos_intersecao_re,
+                    parametros,
+                )
+                estado_controle.manobra_ativa["modo"] = "retomada_pos_intersecao"
+                estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_retomada_pos_intersecao)
+                pid.reiniciar(suave=True)
+                return (
+                    estado_controle.manobra_ativa,
+                    f"retomando linha apos intersecao para {direcao_retomada}",
+                    correcao_pid,
+                )
+
+        if (
+            manobra_encerrada is not None
+            and manobra_encerrada.get("modo") == "giro_90"
+            and not _linha_confiavel_para_retomada(dados_visao, parametros)
+            and float(parametros.tempo_retomada_pos_90) > 0.0
+        ):
+            direcao_retomada = manobra_encerrada.get("direcao")
+            if direcao_retomada not in {"esquerda", "direita"}:
+                direcao_retomada = estado_controle.ultima_direcao_confiavel
+            if direcao_retomada not in {"esquerda", "direita"}:
+                direcao_retomada = "direita"
+
+            estado_controle.estado_atual = ESTADO_CONTENCAO
+            estado_controle.tempo_entrada_estado = agora
+            estado_controle.manobra_ativa = _criar_acao_retomada_pos_90(
+                direcao_retomada,
+                parametros,
+            )
+            estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_retomada_pos_90)
+            pid.reiniciar(suave=True)
+            return (
+                estado_controle.manobra_ativa,
+                f"retomando linha apos curva de 90 para {direcao_retomada}",
+                correcao_pid,
+            )
+
     _atualizar_memoria_linha(estado_controle, dados_visao, parametros, agora)
+    _atualizar_indicios_intersecao(estado_controle, dados_visao, parametros)
 
     linha_minima = _linha_minimamente_valida(dados_visao, parametros)
     linha_em_risco = _linha_em_risco(dados_visao, parametros)
@@ -864,6 +1206,9 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
     em_recuperacao = estado_controle.estado_atual in {ESTADO_SEM_LINHA, ESTADO_BUSCA, ESTADO_CONTENCAO}
 
     if not linha_minima:
+        _zerar_indicios_curva_90(estado_controle)
+        _limpar_indicios_intersecao(estado_controle)
+        estado_controle.instante_inicio_similaridade_alta = -999.0
         if estado_controle.estado_atual != ESTADO_BUSCA:
             estado_controle.estado_atual = ESTADO_BUSCA
             estado_controle.tempo_entrada_estado = agora
@@ -876,19 +1221,17 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
         )
         return acao_busca, motivo_busca, correcao_pid
 
-    if linha_em_risco or (em_recuperacao and (not linha_confiavel or not retomada_confirmada)):
-        if estado_controle.estado_atual != ESTADO_CONTENCAO:
-            estado_controle.estado_atual = ESTADO_CONTENCAO
-            estado_controle.tempo_entrada_estado = agora
-        pid.reiniciar(suave=True)
-        acao_contencao, motivo_contencao, correcao_pid = _calcular_acao_contencao(
-            dados_visao,
+    if _deve_executar_intersecao(estado_controle, dados_visao, parametros, agora):
+        estado_controle.instante_ultima_intersecao = agora
+        _zerar_indicios_curva_90(estado_controle)
+        acao_intersecao, motivo_intersecao = _iniciar_fluxo_intersecao(
             estado_controle,
+            dados_visao,
             parametros,
+            agora,
         )
-        if em_recuperacao and linha_confiavel and not retomada_confirmada:
-            motivo_contencao = "confirmando retomada antes de liberar velocidade normal"
-        return acao_contencao, motivo_contencao, correcao_pid
+        pid.reiniciar(suave=False)
+        return acao_intersecao, motivo_intersecao, correcao_pid
 
     direcao_curva_90 = _deve_executar_curva_90(estado_controle, dados_visao, parametros, agora)
     if direcao_curva_90 is not None:
@@ -907,7 +1250,44 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
         )
         estado_controle.manobra_ativa_ate = agora + tempo_giro_90
         pid.reiniciar(suave=False)
+        _zerar_indicios_curva_90(estado_controle)
         return estado_controle.manobra_ativa, f"curva de 90 graus {direcao_curva_90}", correcao_pid
+
+    if _deve_destravar_por_similaridade(estado_controle, dados_visao, parametros, agora):
+        estado_controle.estado_atual = ESTADO_CONTENCAO
+        estado_controle.tempo_entrada_estado = agora
+        estado_controle.instante_ultimo_destravamento = agora
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        estado_controle.manobra_ativa, direcao_destravamento = _criar_acao_destravamento(
+            estado_controle,
+            dados_visao,
+            parametros,
+        )
+        estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_destravamento)
+        pid.reiniciar(suave=False)
+        return (
+            estado_controle.manobra_ativa,
+            f"destravando por similaridade alta para {direcao_destravamento}",
+            correcao_pid,
+        )
+
+    if linha_em_risco or (em_recuperacao and (not linha_confiavel or not retomada_confirmada)):
+        _zerar_indicios_curva_90(estado_controle)
+        if not bool(dados_visao.get("intersecao_detectada")):
+            _limpar_indicios_intersecao(estado_controle)
+        estado_controle.instante_inicio_similaridade_alta = -999.0
+        if estado_controle.estado_atual != ESTADO_CONTENCAO:
+            estado_controle.estado_atual = ESTADO_CONTENCAO
+            estado_controle.tempo_entrada_estado = agora
+        pid.reiniciar(suave=True)
+        acao_contencao, motivo_contencao, correcao_pid = _calcular_acao_contencao(
+            dados_visao,
+            estado_controle,
+            parametros,
+        )
+        if em_recuperacao and linha_confiavel and not retomada_confirmada:
+            motivo_contencao = "confirmando retomada antes de liberar velocidade normal"
+        return acao_contencao, motivo_contencao, correcao_pid
 
     direcao_assistencia_curva = _deve_executar_assistencia_curva(
         estado_controle,
@@ -958,8 +1338,6 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
 def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, correcao_pid, pid, motivo):
     if acao["tipo"] == "D":
         texto_acao = f"D,{acao['velocidade_esquerda']},{acao['velocidade_direita']}"
-    elif acao["tipo"] in {"L90", "R90"}:
-        texto_acao = f"{acao['tipo']},{acao['velocidade']}"
     else:
         texto_acao = "S"
 
@@ -977,9 +1355,20 @@ def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, co
             "borda="
             f"{'E' if dados_visao.get('linha_toca_borda_esquerda') else ('D' if dados_visao.get('linha_toca_borda_direita') else 'NAO')} "
             f"sem_linha={dados_visao.get('tempo_sem_linha', 0.0):.2f}s "
+            f"sim={dados_visao.get('similaridade_linha', 0.0):.3f} "
             f"ret={estado_controle.quadros_confiaveis_consecutivos}"
         ),
-        f"verde={'SIM' if dados_visao.get('verde_detectado') else 'NAO'} confV={dados_visao.get('confianca_verde', 0.0):.2f}",
+        (
+            "int="
+            f"{'SIM' if dados_visao.get('intersecao_detectada') else 'NAO'} "
+            f"confI={dados_visao.get('confianca_intersecao', 0.0):.2f}"
+        ),
+        (
+            "verde="
+            f"E={('SIM' if dados_visao.get('verde_esquerda_detectado') else 'NAO')} "
+            f"D={('SIM' if dados_visao.get('verde_direita_detectado') else 'NAO')} "
+            f"confV={dados_visao.get('confianca_verde', 0.0):.2f}"
+        ),
         f"pid_p={pid.erro_proporcional:+.3f} pid_i={pid.erro_integral:+.3f} pid_d={pid.erro_derivativo:+.3f}",
         f"correcao_pid={correcao_pid:+.2f}",
     ]
@@ -1001,8 +1390,6 @@ def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, co
 def _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid):
     if acao["tipo"] == "D":
         texto_acao = f"D,{acao['velocidade_esquerda']},{acao['velocidade_direita']}"
-    elif acao["tipo"] in {"L90", "R90"}:
-        texto_acao = f"{acao['tipo']},{acao['velocidade']}"
     else:
         texto_acao = "S"
 
@@ -1014,13 +1401,19 @@ def _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid):
                 f"erro={dados_visao['erro_linha']:+.3f}",
                 f"lookahead={dados_visao.get('erro_lookahead', 0.0):+.3f}",
                 f"curva90={dados_visao.get('confianca_curva_90', 0.0):.2f}",
-                f"verde={'SIM' if dados_visao.get('verde_detectado') else 'NAO'}",
+                (
+                    "verde="
+                    f"E={('SIM' if dados_visao.get('verde_esquerda_detectado') else 'NAO')} "
+                    f"D={('SIM' if dados_visao.get('verde_direita_detectado') else 'NAO')}"
+                ),
                 f"conf={dados_visao['confianca_linha']:.2f}",
                 (
                     "borda="
                     f"{'E' if dados_visao.get('linha_toca_borda_esquerda') else ('D' if dados_visao.get('linha_toca_borda_direita') else 'NAO')}"
                 ),
+                f"int={dados_visao.get('confianca_intersecao', 0.0):.2f}",
                 f"sem_linha={dados_visao.get('tempo_sem_linha', 0.0):.2f}s",
+                f"sim={dados_visao.get('similaridade_linha', 0.0):.3f}",
                 f"ret={estado_controle.quadros_confiaveis_consecutivos}",
                 f"pid={correcao_pid:+.2f}",
                 f"motivo={motivo}",
@@ -1119,6 +1512,21 @@ def analisar_argumentos():
     analisador.add_argument("--margem-lateral-descarte", type=float, default=0.10)
     analisador.add_argument("--lookahead-fracao", type=float, default=0.42)
     analisador.add_argument("--lookahead-minimo-pixels", type=int, default=18)
+    analisador.add_argument(
+        "--desativar-limiar-contextual",
+        action="store_true",
+        help="Desliga limiares diferentes para topo/base da ROI.",
+    )
+    analisador.add_argument("--fracao-topo-contextual", type=float, default=0.40)
+    analisador.add_argument("--ajuste-limiar-topo-contextual", type=int, default=18)
+    analisador.add_argument("--ajuste-limiar-base-contextual", type=int, default=8)
+    analisador.add_argument("--ajuste-limiar-topo-escuro", type=int, default=22)
+    analisador.add_argument("--limiar-densidade-topo-escuro", type=float, default=0.38)
+    analisador.add_argument("--margem-melhoria-densidade-topo", type=float, default=0.08)
+    analisador.add_argument("--faixa-contato-base-temporal", type=float, default=0.26)
+    analisador.add_argument("--peso-distancia-x-temporal", type=float, default=1.0)
+    analisador.add_argument("--peso-distancia-y-temporal", type=float, default=0.30)
+    analisador.add_argument("--intervalo-similaridade-quadros", type=int, default=6)
     analisador.add_argument("--limiar-confianca-curva-90", type=float, default=0.18)
     analisador.add_argument("--limiar-confianca-lookahead-curva-90", type=float, default=0.14)
     analisador.add_argument("--limiar-erro-lookahead-curva-90", type=float, default=0.36)
@@ -1132,13 +1540,44 @@ def analisar_argumentos():
     analisador.add_argument("--largura-janela-branca-curva-90", type=float, default=0.16)
     analisador.add_argument("--largura-janela-lateral-curva-90", type=float, default=0.28)
     analisador.add_argument("--densidade-frontal-max-curva-90", type=float, default=0.08)
+    analisador.add_argument("--largura-minima-intersecao-relativa", type=float, default=0.42)
+    analisador.add_argument("--densidade-lateral-minima-intersecao", type=float, default=0.14)
+    analisador.add_argument("--densidade-centro-minima-intersecao", type=float, default=0.08)
+    analisador.add_argument("--densidade-frontal-minima-intersecao", type=float, default=0.06)
+    analisador.add_argument("--limiar-confianca-intersecao", type=float, default=0.55)
+    analisador.add_argument("--quadros-confirmacao-intersecao", type=int, default=2)
+    analisador.add_argument("--limiar-confianca-intersecao-confirmacao", type=float, default=0.58)
+    analisador.add_argument("--limiar-confianca-intersecao-execucao", type=float, default=0.14)
+    analisador.add_argument("--quadros-confirmacao-verde-intersecao", type=int, default=2)
+    analisador.add_argument("--limiar-confianca-verde-confirmacao", type=float, default=0.14)
+    analisador.add_argument("--cooldown-intersecao", type=float, default=0.80)
+    analisador.add_argument("--velocidade-avanco-intersecao", type=int, default=92)
+    analisador.add_argument("--tempo-avanco-intersecao", type=float, default=0.14)
+    analisador.add_argument("--velocidade-giro-intersecao-frente", type=int, default=140)
+    analisador.add_argument("--velocidade-giro-intersecao-re", type=int, default=132)
+    analisador.add_argument("--tempo-giro-intersecao", type=float, default=0.54)
+    analisador.add_argument("--velocidade-reto-intersecao", type=int, default=96)
+    analisador.add_argument("--tempo-reto-intersecao", type=float, default=0.16)
+    analisador.add_argument("--velocidade-retorno-intersecao", type=int, default=148)
+    analisador.add_argument("--tempo-retorno-intersecao", type=float, default=1.05)
+    analisador.add_argument("--tempo-retomada-pos-intersecao", type=float, default=0.22)
+    analisador.add_argument("--velocidade-retomada-pos-intersecao-frente", type=int, default=112)
+    analisador.add_argument("--velocidade-retomada-pos-intersecao-re", type=int, default=96)
     analisador.add_argument("--roi-verde", type=float, default=0.75)
     analisador.add_argument("--verde-h-min", type=int, default=35)
     analisador.add_argument("--verde-h-max", type=int, default=95)
     analisador.add_argument("--verde-s-min", type=int, default=60)
     analisador.add_argument("--verde-v-min", type=int, default=45)
     analisador.add_argument("--area-minima-verde", type=int, default=180)
-
+    analisador.add_argument("--area-minima-verde-lateral", type=int, default=110)
+    analisador.add_argument("--margem-central-verde", type=float, default=0.10)
+    analisador.add_argument("--limiar-confianca-verde-lateral", type=float, default=0.10)
+    analisador.add_argument(
+        "--detectar-verde",
+        action="store_true",
+        default=False,
+        help="Ativa a deteccao de verde no modo controle (desligado por padrao para reduzir custo de CPU).",
+    )
     analisador.add_argument("--kp", type=float, default=160.0)
     analisador.add_argument("--ki", type=float, default=10.0)
     analisador.add_argument("--kd", type=float, default=42.0)
@@ -1205,6 +1644,33 @@ def analisar_argumentos():
     analisador.add_argument("--velocidade-reversa-contencao", type=int, default=90)
     analisador.add_argument("--velocidade-busca-linha", type=int, default=86)
     analisador.add_argument("--velocidade-reversa-busca-linha", type=int, default=82)
+    analisador.add_argument(
+        "--limiar-similaridade-stuck",
+        type=float,
+        default=0.985,
+        help="Similaridade minima da mascara entre quadros para suspeitar travamento.",
+    )
+    analisador.add_argument(
+        "--tempo-similaridade-stuck",
+        type=float,
+        default=0.75,
+        help="Tempo com similaridade alta antes de acionar destravamento.",
+    )
+    analisador.add_argument(
+        "--cooldown-similaridade-stuck",
+        type=float,
+        default=2.40,
+        help="Tempo minimo entre duas manobras de destravamento.",
+    )
+    analisador.add_argument(
+        "--limiar-erro-similaridade-stuck",
+        type=float,
+        default=0.20,
+        help="Nao considera travamento por similaridade quando o erro lateral esta alto.",
+    )
+    analisador.add_argument("--tempo-destravamento", type=float, default=0.28)
+    analisador.add_argument("--velocidade-destravamento-frente", type=int, default=118)
+    analisador.add_argument("--velocidade-destravamento-re", type=int, default=108)
     analisador.add_argument(
         "--tempo-memoria-busca",
         type=float,
@@ -1284,10 +1750,16 @@ def analisar_argumentos():
     analisador.add_argument("--tempo-giro-90-esquerda", type=float, default=0.62)
     analisador.add_argument("--tempo-minimo-giro-90", type=float, default=0.16)
     analisador.add_argument("--cooldown-giro-90", type=float, default=0.70)
+    analisador.add_argument("--quadros-confirmacao-curva-90", type=int, default=2)
+    analisador.add_argument("--limiar-confianca-intersecao-bloqueio-90", type=float, default=0.62)
+    analisador.add_argument("--limiar-confianca-verde-bloqueio-90", type=float, default=0.35)
     analisador.add_argument("--limiar-confianca-curva-90-execucao", type=float, default=0.22)
     analisador.add_argument("--limiar-confianca-retomada-giro-90", type=float, default=0.26)
     analisador.add_argument("--limiar-erro-retomada-giro-90", type=float, default=0.22)
     analisador.add_argument("--limiar-erro-lookahead-retomada-giro-90", type=float, default=0.34)
+    analisador.add_argument("--tempo-retomada-pos-90", type=float, default=0.20)
+    analisador.add_argument("--velocidade-retomada-pos-90-frente", type=int, default=104)
+    analisador.add_argument("--velocidade-retomada-pos-90-re", type=int, default=92)
     analisador.add_argument("--velocidade-assistencia-curva", type=int, default=112)
     analisador.add_argument("--velocidade-reversa-assistencia-curva", type=int, default=102)
     analisador.add_argument("--tempo-assistencia-curva", type=float, default=0.18)
@@ -1340,6 +1812,17 @@ def criar_configuracao_visao(parametros):
         margem_lateral_descarte=parametros.margem_lateral_descarte,
         lookahead_fracao=parametros.lookahead_fracao,
         lookahead_minimo_pixels=parametros.lookahead_minimo_pixels,
+        usar_limiar_contextual=not parametros.desativar_limiar_contextual,
+        fracao_topo_contextual=parametros.fracao_topo_contextual,
+        ajuste_limiar_topo_contextual=parametros.ajuste_limiar_topo_contextual,
+        ajuste_limiar_base_contextual=parametros.ajuste_limiar_base_contextual,
+        ajuste_limiar_topo_escuro=parametros.ajuste_limiar_topo_escuro,
+        limiar_densidade_topo_escuro=parametros.limiar_densidade_topo_escuro,
+        margem_melhoria_densidade_topo=parametros.margem_melhoria_densidade_topo,
+        faixa_contato_base_temporal=parametros.faixa_contato_base_temporal,
+        peso_distancia_x_temporal=parametros.peso_distancia_x_temporal,
+        peso_distancia_y_temporal=parametros.peso_distancia_y_temporal,
+        intervalo_similaridade_quadros=parametros.intervalo_similaridade_quadros,
         limiar_confianca_curva_90=parametros.limiar_confianca_curva_90,
         limiar_confianca_lookahead_curva_90=parametros.limiar_confianca_lookahead_curva_90,
         limiar_erro_lookahead_curva_90=parametros.limiar_erro_lookahead_curva_90,
@@ -1353,12 +1836,21 @@ def criar_configuracao_visao(parametros):
         largura_janela_branca_curva_90=parametros.largura_janela_branca_curva_90,
         largura_janela_lateral_curva_90=parametros.largura_janela_lateral_curva_90,
         densidade_frontal_max_curva_90=parametros.densidade_frontal_max_curva_90,
+        largura_minima_intersecao_relativa=parametros.largura_minima_intersecao_relativa,
+        densidade_lateral_minima_intersecao=parametros.densidade_lateral_minima_intersecao,
+        densidade_centro_minima_intersecao=parametros.densidade_centro_minima_intersecao,
+        densidade_frontal_minima_intersecao=parametros.densidade_frontal_minima_intersecao,
+        limiar_confianca_intersecao=parametros.limiar_confianca_intersecao,
         roi_verde=parametros.roi_verde,
         verde_h_min=parametros.verde_h_min,
         verde_h_max=parametros.verde_h_max,
         verde_s_min=parametros.verde_s_min,
         verde_v_min=parametros.verde_v_min,
         area_minima_verde=parametros.area_minima_verde,
+        area_minima_verde_lateral=parametros.area_minima_verde_lateral,
+        margem_central_verde=parametros.margem_central_verde,
+        limiar_confianca_verde_lateral=parametros.limiar_confianca_verde_lateral,
+        detectar_verde=parametros.detectar_verde,
     )
 
 
@@ -1388,6 +1880,19 @@ def principal():
     parametros.velocidade_reversa_contencao = _limitar_pwm(parametros.velocidade_reversa_contencao)
     parametros.velocidade_busca_linha = _limitar_pwm(parametros.velocidade_busca_linha)
     parametros.velocidade_reversa_busca_linha = _limitar_pwm(parametros.velocidade_reversa_busca_linha)
+    parametros.velocidade_destravamento_frente = _limitar_pwm(parametros.velocidade_destravamento_frente)
+    parametros.velocidade_destravamento_re = _limitar_pwm(parametros.velocidade_destravamento_re)
+    parametros.velocidade_retomada_pos_90_frente = _limitar_pwm(parametros.velocidade_retomada_pos_90_frente)
+    parametros.velocidade_retomada_pos_90_re = _limitar_pwm(parametros.velocidade_retomada_pos_90_re)
+    parametros.velocidade_avanco_intersecao = _limitar_pwm(parametros.velocidade_avanco_intersecao)
+    parametros.velocidade_giro_intersecao_frente = _limitar_pwm(parametros.velocidade_giro_intersecao_frente)
+    parametros.velocidade_giro_intersecao_re = _limitar_pwm(parametros.velocidade_giro_intersecao_re)
+    parametros.velocidade_reto_intersecao = _limitar_pwm(parametros.velocidade_reto_intersecao)
+    parametros.velocidade_retorno_intersecao = _limitar_pwm(parametros.velocidade_retorno_intersecao)
+    parametros.velocidade_retomada_pos_intersecao_frente = _limitar_pwm(
+        parametros.velocidade_retomada_pos_intersecao_frente
+    )
+    parametros.velocidade_retomada_pos_intersecao_re = _limitar_pwm(parametros.velocidade_retomada_pos_intersecao_re)
     parametros.piso_re_esquerda = _limitar_pwm(parametros.piso_re_esquerda)
     parametros.bonus_re_esquerda = max(0.0, float(parametros.bonus_re_esquerda))
     parametros.quadros_confirmacao_retomada = max(1, int(parametros.quadros_confirmacao_retomada))
@@ -1417,6 +1922,96 @@ def principal():
         0.0,
         1.0,
     )
+    parametros.fracao_topo_contextual = _limitar(float(parametros.fracao_topo_contextual), 0.10, 0.90)
+    parametros.ajuste_limiar_topo_contextual = int(_limitar(parametros.ajuste_limiar_topo_contextual, 0, 80))
+    parametros.ajuste_limiar_base_contextual = int(_limitar(parametros.ajuste_limiar_base_contextual, 0, 80))
+    parametros.ajuste_limiar_topo_escuro = int(_limitar(parametros.ajuste_limiar_topo_escuro, 0, 80))
+    parametros.limiar_densidade_topo_escuro = _limitar(float(parametros.limiar_densidade_topo_escuro), 0.0, 1.0)
+    parametros.margem_melhoria_densidade_topo = _limitar(
+        float(parametros.margem_melhoria_densidade_topo),
+        0.0,
+        1.0,
+    )
+    parametros.faixa_contato_base_temporal = _limitar(float(parametros.faixa_contato_base_temporal), 0.05, 0.60)
+    parametros.peso_distancia_x_temporal = max(0.0, float(parametros.peso_distancia_x_temporal))
+    parametros.peso_distancia_y_temporal = max(0.0, float(parametros.peso_distancia_y_temporal))
+    parametros.intervalo_similaridade_quadros = max(1, int(parametros.intervalo_similaridade_quadros))
+    parametros.limiar_similaridade_stuck = _limitar(float(parametros.limiar_similaridade_stuck), 0.0, 1.0)
+    parametros.tempo_similaridade_stuck = max(0.0, float(parametros.tempo_similaridade_stuck))
+    parametros.cooldown_similaridade_stuck = max(0.0, float(parametros.cooldown_similaridade_stuck))
+    parametros.limiar_erro_similaridade_stuck = _limitar(
+        float(parametros.limiar_erro_similaridade_stuck),
+        0.0,
+        1.0,
+    )
+    parametros.tempo_destravamento = max(0.05, float(parametros.tempo_destravamento))
+    parametros.tempo_retomada_pos_90 = max(0.0, float(parametros.tempo_retomada_pos_90))
+    parametros.quadros_confirmacao_curva_90 = max(1, int(parametros.quadros_confirmacao_curva_90))
+    parametros.limiar_confianca_intersecao_bloqueio_90 = _limitar(
+        float(parametros.limiar_confianca_intersecao_bloqueio_90),
+        0.0,
+        1.0,
+    )
+    parametros.limiar_confianca_verde_bloqueio_90 = _limitar(
+        float(parametros.limiar_confianca_verde_bloqueio_90),
+        0.0,
+        1.0,
+    )
+    parametros.largura_minima_intersecao_relativa = _limitar(
+        float(parametros.largura_minima_intersecao_relativa),
+        0.10,
+        0.95,
+    )
+    parametros.densidade_lateral_minima_intersecao = _limitar(
+        float(parametros.densidade_lateral_minima_intersecao),
+        0.0,
+        1.0,
+    )
+    parametros.densidade_centro_minima_intersecao = _limitar(
+        float(parametros.densidade_centro_minima_intersecao),
+        0.0,
+        1.0,
+    )
+    parametros.densidade_frontal_minima_intersecao = _limitar(
+        float(parametros.densidade_frontal_minima_intersecao),
+        0.0,
+        1.0,
+    )
+    parametros.limiar_confianca_intersecao = _limitar(
+        float(parametros.limiar_confianca_intersecao),
+        0.0,
+        1.0,
+    )
+    parametros.area_minima_verde_lateral = max(1, int(parametros.area_minima_verde_lateral))
+    parametros.margem_central_verde = _limitar(float(parametros.margem_central_verde), 0.02, 0.35)
+    parametros.limiar_confianca_verde_lateral = _limitar(
+        float(parametros.limiar_confianca_verde_lateral),
+        0.0,
+        1.0,
+    )
+    parametros.quadros_confirmacao_intersecao = max(1, int(parametros.quadros_confirmacao_intersecao))
+    parametros.quadros_confirmacao_verde_intersecao = max(1, int(parametros.quadros_confirmacao_verde_intersecao))
+    parametros.limiar_confianca_intersecao_confirmacao = _limitar(
+        float(parametros.limiar_confianca_intersecao_confirmacao),
+        0.0,
+        1.0,
+    )
+    parametros.limiar_confianca_intersecao_execucao = _limitar(
+        float(parametros.limiar_confianca_intersecao_execucao),
+        0.0,
+        1.0,
+    )
+    parametros.limiar_confianca_verde_confirmacao = _limitar(
+        float(parametros.limiar_confianca_verde_confirmacao),
+        0.0,
+        1.0,
+    )
+    parametros.cooldown_intersecao = max(0.0, float(parametros.cooldown_intersecao))
+    parametros.tempo_avanco_intersecao = max(0.0, float(parametros.tempo_avanco_intersecao))
+    parametros.tempo_giro_intersecao = max(0.0, float(parametros.tempo_giro_intersecao))
+    parametros.tempo_reto_intersecao = max(0.0, float(parametros.tempo_reto_intersecao))
+    parametros.tempo_retorno_intersecao = max(0.0, float(parametros.tempo_retorno_intersecao))
+    parametros.tempo_retomada_pos_intersecao = max(0.0, float(parametros.tempo_retomada_pos_intersecao))
 
     if parametros.velocidade_minima > parametros.velocidade_maxima:
         parametros.velocidade_minima, parametros.velocidade_maxima = (
@@ -1472,6 +2067,69 @@ def principal():
             parametros.velocidade_maxima_contencao,
         )
     )
+    parametros.velocidade_retomada_pos_90_frente = int(
+        _limitar(
+            parametros.velocidade_retomada_pos_90_frente,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_retomada_pos_90_re = int(
+        _limitar(
+            parametros.velocidade_retomada_pos_90_re,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_avanco_intersecao = int(
+        _limitar(
+            parametros.velocidade_avanco_intersecao,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_giro_intersecao_frente = int(
+        _limitar(
+            parametros.velocidade_giro_intersecao_frente,
+            0,
+            parametros.velocidade_maxima,
+        )
+    )
+    parametros.velocidade_giro_intersecao_re = int(
+        _limitar(
+            parametros.velocidade_giro_intersecao_re,
+            0,
+            parametros.velocidade_maxima,
+        )
+    )
+    parametros.velocidade_reto_intersecao = int(
+        _limitar(
+            parametros.velocidade_reto_intersecao,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_retorno_intersecao = int(
+        _limitar(
+            parametros.velocidade_retorno_intersecao,
+            0,
+            parametros.velocidade_maxima,
+        )
+    )
+    parametros.velocidade_retomada_pos_intersecao_frente = int(
+        _limitar(
+            parametros.velocidade_retomada_pos_intersecao_frente,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_retomada_pos_intersecao_re = int(
+        _limitar(
+            parametros.velocidade_retomada_pos_intersecao_re,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
     parametros.limiar_confianca_cautela = max(
         parametros.limiar_confianca,
         parametros.limiar_confianca_cautela,
@@ -1501,6 +2159,7 @@ def principal():
 
     tem_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
     exibir_janela = parametros.show or (tem_display and not parametros.no_show)
+    gerar_debug_visual = bool(exibir_janela or parametros.stream or parametros.debug_path)
     servidor_stream = None
     ser = None
 
@@ -1570,7 +2229,12 @@ def principal():
                 print("Falha ao ler quadro da camera.", file=sys.stderr)
                 break
 
-            dados_visao = analisar_quadro(quadro_bgr, configuracao_visao, estado_visao)
+            dados_visao = analisar_quadro(
+                quadro_bgr,
+                configuracao_visao,
+                estado_visao,
+                gerar_debug=gerar_debug_visual,
+            )
             agora = time.monotonic()
 
             acao, motivo, correcao_pid = _atualizar_controle(
@@ -1586,32 +2250,34 @@ def principal():
                 estado_controle.assinatura_ultima_acao = _assinatura_acao(acao)
                 estado_controle.instante_ultimo_envio = agora
 
-            quadro_debug = dados_visao["quadro_debug"].copy()
-            _desenhar_info_controle(
-                quadro_debug,
-                estado_controle,
-                dados_visao,
-                acao,
-                correcao_pid,
-                pid,
-                motivo,
-            )
+            quadro_debug = None
+            if gerar_debug_visual and dados_visao["quadro_debug"] is not None:
+                quadro_debug = dados_visao["quadro_debug"].copy()
+                _desenhar_info_controle(
+                    quadro_debug,
+                    estado_controle,
+                    dados_visao,
+                    acao,
+                    correcao_pid,
+                    pid,
+                    motivo,
+                )
 
-            if parametros.debug_path and (
-                parametros.debug_write_interval <= 0
-                or (agora - instante_ultima_gravacao_debug) >= parametros.debug_write_interval
-            ):
-                cv2.imwrite(parametros.debug_path, quadro_debug)
-                instante_ultima_gravacao_debug = agora
+                if parametros.debug_path and (
+                    parametros.debug_write_interval <= 0
+                    or (agora - instante_ultima_gravacao_debug) >= parametros.debug_write_interval
+                ):
+                    cv2.imwrite(parametros.debug_path, quadro_debug)
+                    instante_ultima_gravacao_debug = agora
 
-            if servidor_stream is not None:
-                servidor_stream.atualizar_quadro(quadro_debug)
+                if servidor_stream is not None:
+                    servidor_stream.atualizar_quadro(quadro_debug)
 
-            if exibir_janela:
-                cv2.imshow("controle_debug", quadro_debug)
-                tecla = cv2.waitKey(1) & 0xFF
-                if tecla in (27, ord("q")):
-                    break
+                if exibir_janela:
+                    cv2.imshow("controle_debug", quadro_debug)
+                    tecla = cv2.waitKey(1) & 0xFF
+                    if tecla in (27, ord("q")):
+                        break
 
             if parametros.print_every <= 0 or (agora - instante_ultimo_log) >= parametros.print_every:
                 _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid)
