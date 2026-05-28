@@ -65,13 +65,25 @@ class EstadoControle:
 
 
 class ControladorPID:
-    def __init__(self, kP, kI, kD, limite_integral, dt_minimo, alpha_derivada):
+    def __init__(
+        self,
+        kP,
+        kI,
+        kD,
+        limite_integral,
+        dt_minimo,
+        alpha_derivada,
+        alpha_correcao_saida,
+        delta_correcao_maxima,
+    ):
         self.kP = float(kP)
         self.kI = float(kI)
         self.kD = float(kD)
         self.limite_integral = float(abs(limite_integral))
         self.dt_minimo = float(max(1e-4, dt_minimo))
         self.alpha_derivada = float(_limitar(alpha_derivada, 0.0, 1.0))
+        self.alpha_correcao_saida = float(_limitar(alpha_correcao_saida, 0.0, 0.95))
+        self.delta_correcao_maxima = float(max(0.0, delta_correcao_maxima))
 
         self.erro_proporcional = 0.0
         self.erro_integral = 0.0
@@ -79,17 +91,20 @@ class ControladorPID:
         self.erro_anterior = 0.0
         self.tempo_anterior = None
         self._derivada_filtrada = 0.0
+        self._correcao_suavizada = 0.0
 
     def reiniciar(self, suave=False):
         self.erro_proporcional = 0.0
         self.erro_derivativo = 0.0
         if suave:
             self.erro_integral *= 0.25
+            self._correcao_suavizada *= 0.25
         else:
             self.erro_integral = 0.0
             self._derivada_filtrada = 0.0
             self.erro_anterior = 0.0
             self.tempo_anterior = None
+            self._correcao_suavizada = 0.0
 
     def estabilizar_centro(self):
         self.erro_proporcional = 0.0
@@ -100,6 +115,9 @@ class ControladorPID:
         self.erro_anterior = 0.0
         self.tempo_anterior = None
         self._derivada_filtrada = 0.0
+        self._correcao_suavizada *= 0.35
+        if abs(self._correcao_suavizada) < 1e-3:
+            self._correcao_suavizada = 0.0
 
     def calcular(self, erro_atual, tempo_atual):
         self.erro_proporcional = float(erro_atual)
@@ -132,6 +150,25 @@ class ControladorPID:
         self.erro_anterior = self.erro_proporcional
         self.tempo_anterior = float(tempo_atual)
         return float(saida)
+
+    def suavizar_correcao(self, correcao_alvo):
+        correcao_alvo = float(correcao_alvo)
+
+        if self.delta_correcao_maxima > 0.0:
+            delta = _limitar(
+                correcao_alvo - self._correcao_suavizada,
+                -self.delta_correcao_maxima,
+                self.delta_correcao_maxima,
+            )
+            correcao_alvo = self._correcao_suavizada + delta
+
+        self._correcao_suavizada = (
+            self.alpha_correcao_saida * self._correcao_suavizada
+            + (1.0 - self.alpha_correcao_saida) * correcao_alvo
+        )
+        if abs(self._correcao_suavizada) < 1e-4:
+            self._correcao_suavizada = 0.0
+        return float(self._correcao_suavizada)
 
 
 def _limitar(valor, minimo, maximo):
@@ -691,21 +728,17 @@ def _atualizar_indicios_intersecao(estado_controle, dados_visao, parametros):
         estado_controle.indicios_intersecao = max(0, estado_controle.indicios_intersecao - 1)
 
     limiar_verde = float(parametros.limiar_confianca_verde_confirmacao)
-    verde_esquerda = bool(
-        dados_visao.get("verde_esquerda_detectado")
-        and float(dados_visao.get("confianca_verde_esquerda", 0.0)) >= limiar_verde
-    )
-    verde_direita = bool(
-        dados_visao.get("verde_direita_detectado")
-        and float(dados_visao.get("confianca_verde_direita", 0.0)) >= limiar_verde
-    )
+    direcao_verde = _obter_direcao_verde_relativa_linha(dados_visao, parametros, limiar_verde)
+    verde_esquerda = bool(direcao_verde == "esquerda")
+    verde_direita = bool(direcao_verde == "direita")
+    verde_duplo = bool(direcao_verde == "retorno")
 
-    if intersecao_candidata and verde_esquerda:
+    if intersecao_candidata and (verde_esquerda or verde_duplo):
         estado_controle.indicios_verde_esquerda = min(12, estado_controle.indicios_verde_esquerda + 1)
     else:
         estado_controle.indicios_verde_esquerda = max(0, estado_controle.indicios_verde_esquerda - 2)
 
-    if intersecao_candidata and verde_direita:
+    if intersecao_candidata and (verde_direita or verde_duplo):
         estado_controle.indicios_verde_direita = min(12, estado_controle.indicios_verde_direita + 1)
     else:
         estado_controle.indicios_verde_direita = max(0, estado_controle.indicios_verde_direita - 2)
@@ -717,7 +750,11 @@ def _limpar_indicios_intersecao(estado_controle):
     estado_controle.indicios_verde_direita = 0
 
 
-def _decidir_direcao_intersecao(estado_controle, parametros):
+def _decidir_direcao_intersecao(estado_controle, dados_visao, parametros):
+    direcao_verde_atual = _obter_direcao_verde_relativa_linha(dados_visao, parametros)
+    if direcao_verde_atual in {"esquerda", "direita", "retorno"}:
+        return direcao_verde_atual
+
     limiar_verde = max(1, int(parametros.quadros_confirmacao_verde_intersecao))
     esquerda = estado_controle.indicios_verde_esquerda >= limiar_verde
     direita = estado_controle.indicios_verde_direita >= limiar_verde
@@ -738,6 +775,63 @@ def _criar_acao_reto_temporizada(velocidade, modo):
     return acao
 
 
+def _ajustar_direcao_verde(direcao, parametros):
+    if direcao not in {"esquerda", "direita"}:
+        return direcao
+    if not getattr(parametros, "inverter_lado_verde", False):
+        return direcao
+    return "direita" if direcao == "esquerda" else "esquerda"
+
+
+def _obter_direcao_verde_relativa_linha(dados_visao, parametros, limiar_confianca=None):
+    if limiar_confianca is None:
+        limiar_confianca = float(parametros.limiar_confianca_verde_confirmacao)
+
+    if not bool(dados_visao.get("verde_detectado")):
+        return None
+    if float(dados_visao.get("confianca_verde", 0.0)) < float(limiar_confianca):
+        return None
+    if bool(dados_visao.get("verde_duplo_detectado")):
+        return "retorno"
+
+    deslocamento = float(dados_visao.get("deslocamento_verde_relativo_linha", 0.0))
+    limiar_deslocamento = float(getattr(parametros, "limiar_deslocamento_verde_linha", 0.0))
+    if deslocamento >= limiar_deslocamento:
+        return _ajustar_direcao_verde("direita", parametros)
+    if deslocamento <= -limiar_deslocamento:
+        return _ajustar_direcao_verde("esquerda", parametros)
+
+    verde_esquerda = bool(dados_visao.get("verde_esquerda_detectado"))
+    verde_direita = bool(dados_visao.get("verde_direita_detectado"))
+    if verde_esquerda ^ verde_direita:
+        return _ajustar_direcao_verde(
+            "esquerda" if verde_esquerda else "direita",
+            parametros,
+        )
+    return None
+
+
+def _criar_acao_giro_verde_curto(direcao, parametros):
+    acao = _criar_acao_assistencia_curva(
+        direcao,
+        parametros.velocidade_giro_verde_frente,
+        parametros.velocidade_giro_verde_re,
+        parametros,
+    )
+    acao["modo"] = "intersecao_verde_giro"
+    acao["direcao"] = direcao
+    return acao
+
+
+def _criar_acao_avanco_antes_giro_verde(direcao, parametros):
+    acao = _criar_acao_reto_temporizada(
+        parametros.velocidade_avanco_antes_verde,
+        "intersecao_verde_pre_giro",
+    )
+    acao["direcao"] = direcao
+    return acao
+
+
 def _criar_acao_retorno_intersecao(parametros):
     velocidade = _limitar_pwm(parametros.velocidade_retorno_intersecao)
     acao = _criar_acao_diferencial(velocidade, -velocidade)
@@ -750,22 +844,31 @@ def _iniciar_fluxo_intersecao(estado_controle, dados_visao, parametros, agora):
     estado_controle.estado_atual = ESTADO_INTERSECAO
     estado_controle.tempo_entrada_estado = agora
 
-    direcao_intersecao = _decidir_direcao_intersecao(estado_controle, parametros)
+    direcao_intersecao = _decidir_direcao_intersecao(estado_controle, dados_visao, parametros)
     if direcao_intersecao in {"esquerda", "direita"}:
         direcao_intersecao = _ajustar_direcao_para_chassi(direcao_intersecao, parametros)
+    if direcao_intersecao in {"esquerda", "direita"}:
+        estado_controle.manobra_ativa = _criar_acao_avanco_antes_giro_verde(
+            direcao_intersecao,
+            parametros,
+        )
+        estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_avanco_antes_verde)
+        motivo = f"verde detectado ({direcao_intersecao}) - avancando antes de virar"
+    else:
+        estado_controle.manobra_ativa = _criar_acao_reto_temporizada(
+            parametros.velocidade_avanco_intersecao,
+            "intersecao_avanco",
+        )
+        estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_avanco_intersecao)
+        motivo = f"intersecao confirmada ({direcao_intersecao}) - avancando para centralizar"
 
-    estado_controle.manobra_ativa = _criar_acao_reto_temporizada(
-        parametros.velocidade_avanco_intersecao,
-        "intersecao_avanco",
-    )
     estado_controle.manobra_ativa["direcao_intersecao"] = direcao_intersecao
     estado_controle.manobra_ativa["verdeE"] = int(estado_controle.indicios_verde_esquerda)
     estado_controle.manobra_ativa["verdeD"] = int(estado_controle.indicios_verde_direita)
-    estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_avanco_intersecao)
     _limpar_indicios_intersecao(estado_controle)
     return (
         estado_controle.manobra_ativa,
-        f"intersecao confirmada ({direcao_intersecao}) - avancando para centralizar",
+        motivo,
     )
 
 
@@ -996,6 +1099,8 @@ def _calcular_acao_pid(dados_visao, pid, parametros, tempo_atual):
     correcao_pid = pid.calcular(erro_controle, tempo_atual)
     correcao_pid = _limitar(correcao_pid, -parametros.correcao_maxima, parametros.correcao_maxima)
     correcao_pid *= ganho_correcao
+    correcao_pid = pid.suavizar_correcao(correcao_pid)
+    correcao_pid = _limitar(correcao_pid, -parametros.correcao_maxima, parametros.correcao_maxima)
 
     if forcar_pivo or erro_referencia_curva >= parametros.limiar_erro_pivo:
         if erro_controle >= 0.0:
@@ -1099,6 +1204,9 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
                 return estado_controle.manobra_ativa, "retomando linha apos intersecao", correcao_pid
         elif modo_manobra in {
             "intersecao_avanco",
+            "intersecao_verde_pre_giro",
+            "intersecao_verde_giro",
+            "intersecao_verde_avanco",
             "intersecao_giro",
             "intersecao_reto",
             "intersecao_retorno",
@@ -1118,15 +1226,11 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
                 estado_controle.manobra_ativa = _criar_acao_retorno_intersecao(parametros)
                 estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_retorno_intersecao)
             elif direcao_intersecao in {"esquerda", "direita"}:
-                estado_controle.manobra_ativa = _criar_acao_giro_90(
+                estado_controle.manobra_ativa = _criar_acao_giro_verde_curto(
                     direcao_intersecao,
-                    parametros.velocidade_giro_intersecao_frente,
-                    parametros.velocidade_giro_intersecao_re,
                     parametros,
                 )
-                estado_controle.manobra_ativa["modo"] = "intersecao_giro"
-                estado_controle.manobra_ativa["direcao"] = direcao_intersecao
-                estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_giro_intersecao)
+                estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_giro_verde)
             else:
                 estado_controle.manobra_ativa = _criar_acao_reto_temporizada(
                     parametros.velocidade_reto_intersecao,
@@ -1138,7 +1242,38 @@ def _atualizar_controle(estado_controle, dados_visao, pid, parametros, agora):
             pid.reiniciar(suave=False)
             return estado_controle.manobra_ativa, f"intersecao: decisao {direcao_intersecao}", correcao_pid
 
+        if manobra_encerrada is not None and manobra_encerrada.get("modo") == "intersecao_verde_pre_giro":
+            direcao_intersecao = manobra_encerrada.get("direcao", "reto")
+            estado_controle.manobra_ativa = _criar_acao_giro_verde_curto(
+                direcao_intersecao,
+                parametros,
+            )
+            estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_giro_verde)
+            pid.reiniciar(suave=False)
+            return (
+                estado_controle.manobra_ativa,
+                f"intersecao: iniciando giro pelo verde em {direcao_intersecao}",
+                correcao_pid,
+            )
+
+        if manobra_encerrada is not None and manobra_encerrada.get("modo") == "intersecao_verde_giro":
+            direcao_intersecao = manobra_encerrada.get("direcao", "reto")
+            estado_controle.manobra_ativa = _criar_acao_reto_temporizada(
+                parametros.velocidade_avanco_verde,
+                "intersecao_verde_avanco",
+            )
+            estado_controle.manobra_ativa["direcao"] = direcao_intersecao
+            estado_controle.manobra_ativa_ate = agora + float(parametros.tempo_avanco_verde)
+            pid.reiniciar(suave=True)
+            return (
+                estado_controle.manobra_ativa,
+                f"intersecao: avancando para buscar a linha pelo verde em {direcao_intersecao}",
+                correcao_pid,
+            )
+
         if manobra_encerrada is not None and manobra_encerrada.get("modo") in {
+            "intersecao_verde_pre_giro",
+            "intersecao_verde_avanco",
             "intersecao_giro",
             "intersecao_reto",
             "intersecao_retorno",
@@ -1367,7 +1502,9 @@ def _desenhar_info_controle(quadro_debug, estado_controle, dados_visao, acao, co
             "verde="
             f"E={('SIM' if dados_visao.get('verde_esquerda_detectado') else 'NAO')} "
             f"D={('SIM' if dados_visao.get('verde_direita_detectado') else 'NAO')} "
-            f"confV={dados_visao.get('confianca_verde', 0.0):.2f}"
+            f"confV={dados_visao.get('confianca_verde', 0.0):.2f} "
+            f"vl={dados_visao.get('direcao_verde_relativa_linha') or 'CENTRO'} "
+            f"dv={dados_visao.get('deslocamento_verde_relativo_linha', 0.0):+.2f}"
         ),
         f"pid_p={pid.erro_proporcional:+.3f} pid_i={pid.erro_integral:+.3f} pid_d={pid.erro_derivativo:+.3f}",
         f"correcao_pid={correcao_pid:+.2f}",
@@ -1404,7 +1541,9 @@ def _imprimir_status(estado_controle, dados_visao, acao, motivo, correcao_pid):
                 (
                     "verde="
                     f"E={('SIM' if dados_visao.get('verde_esquerda_detectado') else 'NAO')} "
-                    f"D={('SIM' if dados_visao.get('verde_direita_detectado') else 'NAO')}"
+                    f"D={('SIM' if dados_visao.get('verde_direita_detectado') else 'NAO')} "
+                    f"vl={dados_visao.get('direcao_verde_relativa_linha') or 'CENTRO'} "
+                    f"dv={dados_visao.get('deslocamento_verde_relativo_linha', 0.0):+.2f}"
                 ),
                 f"conf={dados_visao['confianca_linha']:.2f}",
                 (
@@ -1494,7 +1633,12 @@ def analisar_argumentos():
     analisador.add_argument("--constante-limiar-adaptativo", type=int, default=9)
     analisador.add_argument("--area-minima-contorno", type=int, default=180)
     analisador.add_argument("--area-minima-linha", type=int, default=320)
-    analisador.add_argument("--suavizacao-erro", type=float, default=0.40)
+    analisador.add_argument(
+        "--suavizacao-erro",
+        type=float,
+        default=0.32,
+        help="Peso do erro novo na suavizacao visual. Menor = mais suave; maior = mais reativo.",
+    )
     analisador.add_argument("--limiar-confianca", type=float, default=0.10)
     analisador.add_argument(
         "--limiar-confianca-cautela",
@@ -1563,6 +1707,19 @@ def analisar_argumentos():
     analisador.add_argument("--tempo-retomada-pos-intersecao", type=float, default=0.22)
     analisador.add_argument("--velocidade-retomada-pos-intersecao-frente", type=int, default=112)
     analisador.add_argument("--velocidade-retomada-pos-intersecao-re", type=int, default=96)
+    analisador.add_argument("--velocidade-avanco-antes-verde", type=int, default=92)
+    analisador.add_argument("--tempo-avanco-antes-verde", type=float, default=0.28)
+    analisador.add_argument("--velocidade-giro-verde-frente", type=int, default=112)
+    analisador.add_argument("--velocidade-giro-verde-re", type=int, default=102)
+    analisador.add_argument("--tempo-giro-verde", type=float, default=0.20)
+    analisador.add_argument("--velocidade-avanco-verde", type=int, default=92)
+    analisador.add_argument("--tempo-avanco-verde", type=float, default=0.18)
+    analisador.add_argument(
+        "--limiar-deslocamento-verde-linha",
+        type=float,
+        default=0.04,
+        help="Deslocamento minimo normalizado entre centro do verde e centro da linha para decidir esquerda/direita.",
+    )
     analisador.add_argument("--roi-verde", type=float, default=0.75)
     analisador.add_argument("--verde-h-min", type=int, default=35)
     analisador.add_argument("--verde-h-max", type=int, default=95)
@@ -1572,28 +1729,53 @@ def analisar_argumentos():
     analisador.add_argument("--area-minima-verde-lateral", type=int, default=110)
     analisador.add_argument("--margem-central-verde", type=float, default=0.10)
     analisador.add_argument("--limiar-confianca-verde-lateral", type=float, default=0.10)
+    analisador.set_defaults(inverter_lado_verde=False)
+    analisador.add_argument(
+        "--inverter-lado-verde",
+        dest="inverter_lado_verde",
+        action="store_true",
+        help="Inverte apenas a interpretacao esquerda/direita do verde, sem afetar a correcao da linha.",
+    )
+    analisador.add_argument(
+        "--nao-inverter-lado-verde",
+        dest="inverter_lado_verde",
+        action="store_false",
+        help="Mantem o sentido padrao de esquerda/direita para o verde.",
+    )
     analisador.add_argument(
         "--detectar-verde",
         action="store_true",
         default=False,
         help="Ativa a deteccao de verde no modo controle (desligado por padrao para reduzir custo de CPU).",
     )
-    analisador.add_argument("--kp", type=float, default=160.0)
-    analisador.add_argument("--ki", type=float, default=10.0)
-    analisador.add_argument("--kd", type=float, default=42.0)
+    analisador.add_argument("--kp", type=float, default=145.0)
+    analisador.add_argument("--ki", type=float, default=8.0)
+    analisador.add_argument("--kd", type=float, default=30.0)
     analisador.add_argument("--integral-max", type=float, default=0.85)
     analisador.add_argument("--dt-minimo", type=float, default=0.01)
-    analisador.add_argument("--alpha-derivada", type=float, default=0.25)
-    analisador.add_argument("--correcao-maxima", type=float, default=235.0)
+    analisador.add_argument("--alpha-derivada", type=float, default=0.45)
+    analisador.add_argument(
+        "--alpha-correcao-saida",
+        type=float,
+        default=0.40,
+        help="Suavizacao adicional na saida final da correcao. Maior = transicao mais amortecida.",
+    )
+    analisador.add_argument(
+        "--delta-correcao-maxima",
+        type=float,
+        default=24.0,
+        help="Limita quanto a correcao pode variar entre quadros, reduzindo trancos.",
+    )
+    analisador.add_argument("--correcao-maxima", type=float, default=185.0)
     analisador.add_argument("--ganho-lookahead-suave", type=float, default=0.32)
-    analisador.add_argument("--ganho-lookahead-forte", type=float, default=1.22)
+    analisador.add_argument("--ganho-lookahead-forte", type=float, default=1.02)
     analisador.add_argument("--lookahead-erro-minimo", type=float, default=0.10)
     analisador.add_argument("--lookahead-erro-maximo", type=float, default=0.48)
-    analisador.add_argument("--fator-correcao-forte", type=float, default=1.36)
+    analisador.add_argument("--fator-correcao-forte", type=float, default=1.18)
     analisador.add_argument("--fator-antecipacao-velocidade", type=float, default=1.35)
     analisador.add_argument("--limiar-confianca-lookahead-velocidade", type=float, default=0.18)
-    analisador.add_argument("--bonus-tracao-externa", type=float, default=8.0)
-    analisador.add_argument("--bonus-freio-interno", type=float, default=26.0)
+    analisador.add_argument("--bonus-tracao-externa", type=float, default=4.0)
+    analisador.add_argument("--bonus-freio-interno", type=float, default=16.0)
 
     analisador.add_argument("--velocidade-base", type=int, default=84)
     analisador.add_argument("--velocidade-curva", type=int, default=60)
@@ -1893,8 +2075,22 @@ def principal():
         parametros.velocidade_retomada_pos_intersecao_frente
     )
     parametros.velocidade_retomada_pos_intersecao_re = _limitar_pwm(parametros.velocidade_retomada_pos_intersecao_re)
+    parametros.velocidade_avanco_antes_verde = _limitar_pwm(parametros.velocidade_avanco_antes_verde)
+    parametros.velocidade_giro_verde_frente = _limitar_pwm(parametros.velocidade_giro_verde_frente)
+    parametros.velocidade_giro_verde_re = _limitar_pwm(parametros.velocidade_giro_verde_re)
+    parametros.velocidade_avanco_verde = _limitar_pwm(parametros.velocidade_avanco_verde)
     parametros.piso_re_esquerda = _limitar_pwm(parametros.piso_re_esquerda)
     parametros.bonus_re_esquerda = max(0.0, float(parametros.bonus_re_esquerda))
+    parametros.suavizacao_erro = _limitar(float(parametros.suavizacao_erro), 0.05, 0.95)
+    parametros.alpha_derivada = _limitar(float(parametros.alpha_derivada), 0.0, 0.98)
+    parametros.alpha_correcao_saida = _limitar(float(parametros.alpha_correcao_saida), 0.0, 0.95)
+    parametros.delta_correcao_maxima = max(0.0, float(parametros.delta_correcao_maxima))
+    parametros.correcao_maxima = max(0.0, float(parametros.correcao_maxima))
+    parametros.ganho_lookahead_suave = _limitar(float(parametros.ganho_lookahead_suave), 0.0, 2.0)
+    parametros.ganho_lookahead_forte = _limitar(float(parametros.ganho_lookahead_forte), 0.0, 2.0)
+    parametros.fator_correcao_forte = _limitar(float(parametros.fator_correcao_forte), 1.0, 2.5)
+    parametros.bonus_tracao_externa = max(0.0, float(parametros.bonus_tracao_externa))
+    parametros.bonus_freio_interno = max(0.0, float(parametros.bonus_freio_interno))
     parametros.quadros_confirmacao_retomada = max(1, int(parametros.quadros_confirmacao_retomada))
     parametros.tempo_memoria_busca = max(0.0, float(parametros.tempo_memoria_busca))
     parametros.tempo_maximo_busca_sem_linha = max(0.0, float(parametros.tempo_maximo_busca_sem_linha))
@@ -2012,6 +2208,14 @@ def principal():
     parametros.tempo_reto_intersecao = max(0.0, float(parametros.tempo_reto_intersecao))
     parametros.tempo_retorno_intersecao = max(0.0, float(parametros.tempo_retorno_intersecao))
     parametros.tempo_retomada_pos_intersecao = max(0.0, float(parametros.tempo_retomada_pos_intersecao))
+    parametros.tempo_avanco_antes_verde = max(0.0, float(parametros.tempo_avanco_antes_verde))
+    parametros.tempo_giro_verde = max(0.0, float(parametros.tempo_giro_verde))
+    parametros.tempo_avanco_verde = max(0.0, float(parametros.tempo_avanco_verde))
+    parametros.limiar_deslocamento_verde_linha = _limitar(
+        float(parametros.limiar_deslocamento_verde_linha),
+        0.0,
+        1.0,
+    )
 
     if parametros.velocidade_minima > parametros.velocidade_maxima:
         parametros.velocidade_minima, parametros.velocidade_maxima = (
@@ -2130,6 +2334,34 @@ def principal():
             parametros.velocidade_maxima_contencao,
         )
     )
+    parametros.velocidade_avanco_antes_verde = int(
+        _limitar(
+            parametros.velocidade_avanco_antes_verde,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
+    parametros.velocidade_giro_verde_frente = int(
+        _limitar(
+            parametros.velocidade_giro_verde_frente,
+            0,
+            parametros.velocidade_maxima,
+        )
+    )
+    parametros.velocidade_giro_verde_re = int(
+        _limitar(
+            parametros.velocidade_giro_verde_re,
+            0,
+            parametros.velocidade_maxima,
+        )
+    )
+    parametros.velocidade_avanco_verde = int(
+        _limitar(
+            parametros.velocidade_avanco_verde,
+            0,
+            parametros.velocidade_maxima_contencao,
+        )
+    )
     parametros.limiar_confianca_cautela = max(
         parametros.limiar_confianca,
         parametros.limiar_confianca_cautela,
@@ -2153,6 +2385,8 @@ def principal():
         limite_integral=parametros.integral_max,
         dt_minimo=parametros.dt_minimo,
         alpha_derivada=parametros.alpha_derivada,
+        alpha_correcao_saida=parametros.alpha_correcao_saida,
+        delta_correcao_maxima=parametros.delta_correcao_maxima,
     )
 
     estado_controle.tempo_entrada_estado = time.monotonic()

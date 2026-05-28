@@ -975,6 +975,8 @@ def _detectar_verde(quadro_bgr, configuracao):
     nucleo = np.ones((5, 5), dtype=np.uint8)
     mascara_verde = cv2.morphologyEx(mascara_verde, cv2.MORPH_OPEN, nucleo, iterations=1)
     mascara_verde = cv2.morphologyEx(mascara_verde, cv2.MORPH_CLOSE, nucleo, iterations=2)
+    mascara_verde_total = np.zeros(quadro_bgr.shape[:2], dtype=np.uint8)
+    mascara_verde_total[y_inicio:y_fim, :] = mascara_verde
 
     contornos, _ = cv2.findContours(mascara_verde, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     area_referencia = max(1.0, float(mascara_verde.shape[0] * mascara_verde.shape[1]))
@@ -1005,6 +1007,7 @@ def _detectar_verde(quadro_bgr, configuracao):
             "caixa_verde": None,
             "centro_verde": None,
             "faixa_verde": (y_inicio, y_fim, largura_quadro),
+            "mascara_verde_total": mascara_verde_total,
             "verde_esquerda_detectado": False,
             "verde_direita_detectado": False,
             "verde_duplo_detectado": False,
@@ -1048,6 +1051,7 @@ def _detectar_verde(quadro_bgr, configuracao):
         "caixa_verde": melhor["caixa"],
         "centro_verde": melhor["centro"],
         "faixa_verde": (y_inicio, y_fim, largura_quadro),
+        "mascara_verde_total": mascara_verde_total,
         "verde_esquerda_detectado": verde_esquerda,
         "verde_direita_detectado": verde_direita,
         "verde_duplo_detectado": bool(verde_esquerda and verde_direita),
@@ -1068,6 +1072,7 @@ def _resultado_verde_desativado(formato_quadro):
         "caixa_verde": None,
         "centro_verde": None,
         "faixa_verde": (0, altura, largura),
+        "mascara_verde_total": np.zeros((altura, largura), dtype=np.uint8),
         "verde_esquerda_detectado": False,
         "verde_direita_detectado": False,
         "verde_duplo_detectado": False,
@@ -1079,9 +1084,39 @@ def _resultado_verde_desativado(formato_quadro):
     }
 
 
+def _remover_verde_da_mascara_linha(mascara_linha, deteccao_verde, y_inicio_linha, y_fim_linha):
+    if mascara_linha is None:
+        return None
+
+    mascara_verde_total = deteccao_verde.get("mascara_verde_total")
+    if mascara_verde_total is None:
+        return mascara_linha
+
+    mascara_verde_roi = mascara_verde_total[y_inicio_linha:y_fim_linha, :]
+    if mascara_verde_roi.shape[:2] != mascara_linha.shape[:2]:
+        return mascara_linha
+    if not np.any(mascara_verde_roi):
+        return mascara_linha
+
+    # Expande levemente a mascara verde para evitar bordas do marcador
+    # contaminando a deteccao em tons de cinza.
+    nucleo = np.ones((5, 5), dtype=np.uint8)
+    mascara_verde_roi = cv2.dilate(mascara_verde_roi, nucleo, iterations=1)
+    mascara_sem_verde = cv2.bitwise_and(
+        mascara_linha,
+        cv2.bitwise_not(mascara_verde_roi),
+    )
+    return mascara_sem_verde
+
+
 def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
     tempo_atual = time.monotonic()
     y_roi, y_fim, largura_quadro = _obter_limites_roi(quadro_bgr.shape, configuracao.roi)
+
+    if configuracao.detectar_verde:
+        deteccao_verde = _detectar_verde(quadro_bgr, configuracao)
+    else:
+        deteccao_verde = _resultado_verde_desativado(quadro_bgr.shape)
 
     quadro_roi_bgr = quadro_bgr[y_roi:y_fim]
     mascara_linha_crua, limiar_usado, quadro_suave, rampa_escura_detectada = _gerar_mascara_linha(
@@ -1095,6 +1130,18 @@ def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
         mascara_linha_crua.copy(),
         quadro_suave,
         configuracao,
+    )
+    mascara_linha_base = _remover_verde_da_mascara_linha(
+        mascara_linha_base,
+        deteccao_verde,
+        y_roi,
+        y_fim,
+    )
+    mascara_linha_refinada = _remover_verde_da_mascara_linha(
+        mascara_linha_refinada,
+        deteccao_verde,
+        y_roi,
+        y_fim,
     )
 
     info_linha_refinada = _selecionar_linha(mascara_linha_refinada, estado, configuracao)
@@ -1137,10 +1184,6 @@ def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
         mascara_linha.shape[1],
         configuracao,
     )
-    if configuracao.detectar_verde:
-        deteccao_verde = _detectar_verde(quadro_bgr, configuracao)
-    else:
-        deteccao_verde = _resultado_verde_desativado(quadro_bgr.shape)
 
     direcao_verde = None
     centro_verde_normalizado = 0.0
@@ -1150,6 +1193,23 @@ def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
             _limitar((centro_verde_x - (largura_quadro / 2.0)) / max(1.0, largura_quadro / 2.0), -1.0, 1.0)
         )
         direcao_verde = "direita" if centro_verde_normalizado > 0.0 else "esquerda"
+
+    direcao_verde_relativa_linha = None
+    deslocamento_verde_relativo_linha = 0.0
+    if (
+        info_linha["linha_encontrada"]
+        and deteccao_verde.get("verde_detectado")
+        and deteccao_verde.get("centro_verde") is not None
+    ):
+        centro_verde_x = float(deteccao_verde["centro_verde"][0])
+        centro_linha_x = float(info_linha["centro_x"])
+        deslocamento_verde_relativo_linha = float(
+            _limitar((centro_verde_x - centro_linha_x) / max(1.0, largura_quadro / 2.0), -1.0, 1.0)
+        )
+        if deslocamento_verde_relativo_linha > 0.0:
+            direcao_verde_relativa_linha = "direita"
+        elif deslocamento_verde_relativo_linha < 0.0:
+            direcao_verde_relativa_linha = "esquerda"
 
     similaridade_linha = 0.0
     estado.contador_quadros += 1
@@ -1263,6 +1323,11 @@ def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
                 f"confV={deteccao_verde['confianca_verde']:.2f} areaV={deteccao_verde['area_verde']:.0f}"
             ),
             (
+                "verdeLinha="
+                f"{direcao_verde_relativa_linha or 'CENTRO'} "
+                f"deltaVL={deslocamento_verde_relativo_linha:+.2f}"
+            ),
+            (
                 f"sim={similaridade_linha:.3f} "
                 f"ctx={'escuro' if rampa_escura_detectada else 'normal'}"
             ),
@@ -1323,6 +1388,8 @@ def analisar_quadro(quadro_bgr, configuracao, estado, gerar_debug=True):
         "quantidade_marcadores_verde": deteccao_verde["quantidade_marcadores_verde"],
         "direcao_verde": direcao_verde,
         "centro_verde_normalizado": centro_verde_normalizado,
+        "direcao_verde_relativa_linha": direcao_verde_relativa_linha,
+        "deslocamento_verde_relativo_linha": deslocamento_verde_relativo_linha,
         "confianca_linha": info_linha["confianca"],
         "linha_encontrada": info_linha["linha_encontrada"],
         "linha_toca_borda_esquerda": indicadores_laterais["linha_toca_borda_esquerda"],
